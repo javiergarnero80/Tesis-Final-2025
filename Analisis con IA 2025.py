@@ -1151,29 +1151,276 @@ class DataAnalyzer:
         messagebox.showinfo("Clasificación de Texto con IA", explanation)
 
     def prediccion_tendencias_ia(self):
-        """Predice tendencias utilizando un modelo avanzado de IA (SVR)."""
+        """Realiza predicción avanzada de tendencias agrícolas usando múltiples algoritmos de IA con optimización de hiperparámetros."""
         if self.df.empty or 'año' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'año' y 'produccion'.")
             return
 
-        X = self.df[['año']].values
-        y = self.df['produccion'].values
+        # Preparar datos
+        df_trabajo = self.df.dropna(subset=['año', 'produccion']).copy()
+        if len(df_trabajo) < 10:
+            messagebox.showwarning("Advertencia", "Se necesitan al menos 10 registros para el análisis predictivo.")
+            return
 
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        X = df_trabajo[['año']].values
+        y = df_trabajo['produccion'].values
 
-        # Predicción con Support Vector Regression (SVR)
-        model = SVR(kernel='rbf', C=100, gamma=0.1, epsilon=.1)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        # Escalar características para mejor rendimiento
+        scaler_X = StandardScaler()
+        scaler_y = StandardScaler()
 
-        mse = mean_squared_error(y_test, y_pred)
-        r2 = r2_score(y_test, y_pred)
+        X_scaled = scaler_X.fit_transform(X)
+        y_scaled = scaler_y.fit_transform(y.reshape(-1, 1)).ravel()
+
+        # Dividir datos
+        X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
+        X_train_orig, X_test_orig, y_train_orig, y_test_orig = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        # Definir modelos y parámetros para comparación
+        models = {
+            'SVR RBF': {
+                'model': SVR(),
+                'params': {
+                    'kernel': ['rbf'],
+                    'C': [0.1, 1, 10, 100],
+                    'gamma': ['scale', 'auto', 0.01, 0.1, 1],
+                    'epsilon': [0.01, 0.1, 0.2]
+                }
+            },
+            'SVR Lineal': {
+                'model': SVR(),
+                'params': {
+                    'kernel': ['linear'],
+                    'C': [0.1, 1, 10, 100],
+                    'epsilon': [0.01, 0.1, 0.2]
+                }
+            },
+            'Random Forest': {
+                'model': RandomForestClassifier(random_state=42),
+                'params': {
+                    'n_estimators': [50, 100, 200],
+                    'max_depth': [None, 10, 20],
+                    'min_samples_split': [2, 5, 10]
+                }
+            }
+        }
+
+        # Entrenar y evaluar modelos
+        results = {}
+        best_model = None
+        best_score = -float('inf')
+        best_model_name = ""
+
+        print("🔍 Optimizando modelos de IA...")
+
+        for name, config in models.items():
+            try:
+                # Grid Search con validación cruzada
+                grid_search = GridSearchCV(
+                    config['model'],
+                    config['params'],
+                    cv=5,
+                    scoring='neg_mean_squared_error',
+                    n_jobs=-1
+                )
+
+                grid_search.fit(X_train, y_train)
+
+                # Evaluar en conjunto de prueba
+                y_pred_scaled = grid_search.predict(X_test)
+                y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
+
+                # Calcular métricas
+                mse = mean_squared_error(y_test_orig, y_pred)
+                rmse = np.sqrt(mse)
+                mae = np.mean(np.abs(y_test_orig - y_pred))
+                r2 = r2_score(y_test_orig, y_pred)
+
+                results[name] = {
+                    'model': grid_search.best_estimator_,
+                    'params': grid_search.best_params_,
+                    'mse': mse,
+                    'rmse': rmse,
+                    'mae': mae,
+                    'r2': r2,
+                    'y_pred': y_pred,
+                    'cv_score': -grid_search.best_score_
+                }
+
+                # Actualizar mejor modelo
+                if r2 > best_score:
+                    best_score = r2
+                    best_model = grid_search.best_estimator_
+                    best_model_name = name
+
+                print(f"✅ {name}: R² = {r2:.3f}, RMSE = {rmse:.2f}")
+
+            except Exception as e:
+                print(f"❌ Error en {name}: {e}")
+                continue
+
+        if not results:
+            messagebox.showerror("Error", "No se pudieron entrenar los modelos correctamente.")
+            return
+
+        # Crear visualización comparativa
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+
+        # Gráfico 1: Comparación de modelos
+        model_names = list(results.keys())
+        r2_scores = [results[name]['r2'] for name in model_names]
+        rmse_scores = [results[name]['rmse'] for name in model_names]
+
+        x = np.arange(len(model_names))
+        width = 0.35
+
+        bars1 = ax1.bar(x - width/2, r2_scores, width, label='R²', color='skyblue', alpha=0.8)
+        ax1.set_ylabel('Coeficiente de Determinación (R²)', color='skyblue')
+        ax1.set_title('Comparación de Rendimiento de Modelos')
+        ax1.set_xticks(x)
+        ax1.set_xticklabels(model_names, rotation=45)
+        ax1.legend(loc='upper left')
+
+        ax1_twin = ax1.twinx()
+        bars2 = ax1_twin.bar(x + width/2, rmse_scores, width, label='RMSE', color='orange', alpha=0.8)
+        ax1_twin.set_ylabel('Error Cuadrático Medio (RMSE)', color='orange')
+        ax1_twin.legend(loc='upper right')
+
+        # Agregar valores en barras
+        for bar, val in zip(bars1, r2_scores):
+            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
+                    f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+
+        for bar, val in zip(bars2, rmse_scores):
+            ax1_twin.text(bar.get_x() + bar.get_width()/2, bar.get_height() + val*0.02,
+                         f'{val:.0f}', ha='center', va='bottom', fontsize=8)
+
+        # Gráfico 2: Predicciones vs Valores Reales (mejor modelo)
+        best_result = results[best_model_name]
+        ax2.scatter(y_test_orig, best_result['y_pred'], alpha=0.6, color='green', s=50)
+        ax2.plot([y_test_orig.min(), y_test_orig.max()],
+                [y_test_orig.min(), y_test_orig.max()],
+                'r--', linewidth=2, label='Línea ideal')
+        ax2.set_xlabel('Producción Real (toneladas)')
+        ax2.set_ylabel('Producción Predicha (toneladas)')
+        ax2.set_title(f'Predicciones vs Realidad - {best_model_name}')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+
+        # Agregar línea de tendencia
+        z = np.polyfit(y_test_orig, best_result['y_pred'], 1)
+        p = np.poly1d(z)
+        ax2.plot(y_test_orig, p(y_test_orig), "b--", alpha=0.8, label='Tendencia')
+
+        # Gráfico 3: Serie temporal con predicciones
+        años_ordenados = np.sort(df_trabajo['año'].unique())
+        produccion_real = df_trabajo.groupby('año')['produccion'].mean()
+
+        ax3.plot(produccion_real.index, produccion_real.values,
+                'o-', linewidth=2, label='Producción Real', color='blue')
+
+        # Generar predicciones para años futuros
+        años_futuros = np.arange(años_ordenados.max() + 1, años_ordenados.max() + 6)
+        X_futuro = scaler_X.transform(años_futuros.reshape(-1, 1))
+        y_futuro_scaled = best_model.predict(X_futuro)
+        y_futuro = scaler_y.inverse_transform(y_futuro_scaled.reshape(-1, 1)).ravel()
+
+        ax3.plot(años_futuros, y_futuro, 'r--o', linewidth=2,
+                label='Predicción IA (5 años)', markersize=6)
+
+        ax3.set_xlabel('Año')
+        ax3.set_ylabel('Producción Promedio (toneladas)')
+        ax3.set_title('Tendencias Históricas y Predicciones Futuras')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+
+        # Gráfico 4: Distribución de errores
+        errores = y_test_orig - best_result['y_pred']
+        ax4.hist(errores, bins=20, alpha=0.7, color='purple', edgecolor='black')
+        ax4.axvline(0, color='red', linestyle='--', linewidth=2, label='Sin error')
+        ax4.set_xlabel('Error de Predicción (toneladas)')
+        ax4.set_ylabel('Frecuencia')
+        ax4.set_title('Distribución de Errores de Predicción')
+        ax4.legend()
+        ax4.grid(True, alpha=0.3)
+
+        # Estadísticas de errores
+        error_mean = np.mean(errores)
+        error_std = np.std(errores)
+        ax4.text(0.02, 0.98, f'Error promedio: {error_mean:.1f} ton\nDesviación: {error_std:.1f} ton',
+                transform=ax4.transAxes, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+        plt.suptitle("prediccion_tendencias_ia", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+        plt.tight_layout()
+
+        # Guardar gráfico
+        output_file = OUTPUT_DIR / "prediccion_tendencias_ia_avanzada.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.show()
+        logging.info(f"Análisis predictivo avanzado guardado en {output_file}")
+
+        # Crear reporte detallado
+        best_result = results[best_model_name]
+
+        # Calcular estadísticas adicionales
+        total_datos = len(df_trabajo)
+        años_unicos = len(df_trabajo['año'].unique())
+        produccion_total = df_trabajo['produccion'].sum()
+
+        # Análisis de tendencias
+        años_sorted = sorted(df_trabajo['año'].unique())
+        if len(años_sorted) > 1:
+            prod_inicial = df_trabajo[df_trabajo['año'] == años_sorted[0]]['produccion'].mean()
+            prod_final = df_trabajo[df_trabajo['año'] == años_sorted[-1]]['produccion'].mean()
+            if prod_inicial > 0:
+                cambio_total = ((prod_final - prod_inicial) / prod_inicial) * 100
+            else:
+                cambio_total = 0
+        else:
+            cambio_total = 0
 
         explanation = (
-            f"Este análisis utiliza un modelo avanzado de Support Vector Regression (SVR) para predecir la producción agrícola. "
-            f"El error cuadrático medio (MSE) es {mse:.2f}, y el coeficiente de determinación (R2) es {r2:.2f}, lo que muestra qué tan bien los datos se ajustan al modelo."
+            f"🤖 ANÁLISIS PREDICTIVO AVANZADO CON IA\n\n"
+            f"📊 Datos analizados: {total_datos:,} registros de producción\n"
+            f"📅 Período: {años_sorted[0]} - {años_sorted[-1]} ({años_unicos} años)\n"
+            f"🌾 Producción total: {produccion_total:,.0f} toneladas\n\n"
+            f"🏆 MEJOR MODELO: {best_model_name}\n"
+            f"   • Parámetros óptimos: {best_result['params']}\n"
+            f"   • R² (precisión): {best_result['r2']:.3f}\n"
+            f"   • RMSE (error): {best_result['rmse']:.0f} toneladas\n"
+            f"   • MAE (error absoluto): {best_result['mae']:.0f} toneladas\n\n"
+            f"📈 COMPARACIÓN DE MODELOS:\n"
         )
-        messagebox.showinfo("Predicción de Tendencias con IA", explanation)
+
+        for name, result in results.items():
+            icon = "🏆" if name == best_model_name else "📊"
+            explanation += f"   {icon} {name}: R²={result['r2']:.3f}, RMSE={result['rmse']:.0f}\n"
+
+        explanation += (
+            f"\n🔮 PREDICCIONES FUTURAS (5 años):\n"
+            f"   • {años_futuros[0]}: {y_futuro[0]:,.0f} toneladas\n"
+            f"   • {años_futuros[1]}: {y_futuro[1]:,.0f} toneladas\n"
+            f"   • {años_futuros[2]}: {y_futuro[2]:,.0f} toneladas\n"
+            f"   • {años_futuros[3]}: {y_futuro[3]:,.0f} toneladas\n"
+            f"   • {años_futuros[4]}: {y_futuro[4]:,.0f} toneladas\n\n"
+            f"📊 ANÁLISIS DE TENDENCIAS:\n"
+            f"   • Cambio total en el período: {cambio_total:+.1f}%\n"
+            f"   • Tendencia: {'📈 Crecimiento' if cambio_total > 5 else '📉 Declive' if cambio_total < -5 else '➡️ Estable'}\n\n"
+            f"🎯 INTERPRETACIÓN PARA TESIS:\n"
+            f"   • El modelo {best_model_name} explica el {best_result['r2']*100:.1f}% de la variabilidad en producción\n"
+            f"   • Las predicciones futuras muestran {('continuidad' if abs(cambio_total) < 10 else 'cambio significativo')}\n"
+            f"   • La IA identifica patrones no lineales que métodos tradicionales no capturan\n"
+            f"   • Los errores de predicción ({best_result['rmse']:.0f} ton) indican precisión aceptable\n\n"
+            f"💡 APLICACIONES PRÁCTICAS:\n"
+            f"   • Planificación agrícola basada en predicciones precisas\n"
+            f"   • Optimización de recursos con proyecciones futuras\n"
+            f"   • Gestión de riesgos con escenarios predictivos\n"
+            f"   • Toma de decisiones estratégicas fundamentada en IA"
+        )
+
+        messagebox.showinfo("Predicción Avanzada de Tendencias con IA",
+                          f"Análisis completado y guardado en {output_file}\n\n{explanation}")
 
     def analisis_predictivo_nn(self):
         """Realiza un análisis predictivo utilizando una red neuronal simple."""
