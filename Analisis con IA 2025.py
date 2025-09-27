@@ -1152,17 +1152,21 @@ class DataAnalyzer:
 
     def prediccion_tendencias_ia(self):
         """Realiza predicción avanzada de tendencias agrícolas usando múltiples algoritmos de IA con optimización de hiperparámetros."""
-        if self.df.empty or 'año' not in self.df.columns or 'produccion' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'año' y 'produccion'.")
+        if self.df.empty or 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'campaña' y 'produccion'.")
             return
 
         # Preparar datos
-        df_trabajo = self.df.dropna(subset=['año', 'produccion']).copy()
+        df_trabajo = self.df.dropna(subset=['campaña', 'produccion']).copy()
         if len(df_trabajo) < 10:
             messagebox.showwarning("Advertencia", "Se necesitan al menos 10 registros para el análisis predictivo.")
             return
 
-        X = df_trabajo[['año']].values
+        # Convertir campaña a valores numéricos para el análisis
+        df_trabajo['año_numerico'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+        df_trabajo = df_trabajo.dropna(subset=['año_numerico'])
+
+        X = df_trabajo[['año_numerico']].values
         y = df_trabajo['produccion'].values
 
         # Escalar características para mejor rendimiento
@@ -1313,8 +1317,8 @@ class DataAnalyzer:
         ax2.plot(y_test_orig, p(y_test_orig), "b--", alpha=0.8, label='Tendencia')
 
         # Gráfico 3: Serie temporal con predicciones
-        años_ordenados = np.sort(df_trabajo['año'].unique())
-        produccion_real = df_trabajo.groupby('año')['produccion'].mean()
+        años_ordenados = np.sort(df_trabajo['año_numerico'].unique())
+        produccion_real = df_trabajo.groupby('año_numerico')['produccion'].mean()
 
         ax3.plot(produccion_real.index, produccion_real.values,
                 'o-', linewidth=2, label='Producción Real', color='blue')
@@ -1328,7 +1332,7 @@ class DataAnalyzer:
         ax3.plot(años_futuros, y_futuro, 'r--o', linewidth=2,
                 label='Predicción IA (5 años)', markersize=6)
 
-        ax3.set_xlabel('Año')
+        ax3.set_xlabel('Campaña')
         ax3.set_ylabel('Producción Promedio (toneladas)')
         ax3.set_title('Tendencias Históricas y Predicciones Futuras')
         ax3.legend()
@@ -1365,14 +1369,14 @@ class DataAnalyzer:
 
         # Calcular estadísticas adicionales
         total_datos = len(df_trabajo)
-        años_unicos = len(df_trabajo['año'].unique())
+        años_unicos = len(df_trabajo['año_numerico'].unique())
         produccion_total = df_trabajo['produccion'].sum()
 
         # Análisis de tendencias
-        años_sorted = sorted(df_trabajo['año'].unique())
+        años_sorted = sorted(df_trabajo['año_numerico'].unique())
         if len(años_sorted) > 1:
-            prod_inicial = df_trabajo[df_trabajo['año'] == años_sorted[0]]['produccion'].mean()
-            prod_final = df_trabajo[df_trabajo['año'] == años_sorted[-1]]['produccion'].mean()
+            prod_inicial = df_trabajo[df_trabajo['año_numerico'] == años_sorted[0]]['produccion'].mean()
+            prod_final = df_trabajo[df_trabajo['año_numerico'] == años_sorted[-1]]['produccion'].mean()
             if prod_inicial > 0:
                 cambio_total = ((prod_final - prod_inicial) / prod_inicial) * 100
             else:
@@ -1383,7 +1387,7 @@ class DataAnalyzer:
         explanation = (
             f"🤖 ANÁLISIS PREDICTIVO AVANZADO CON IA\n\n"
             f"📊 Datos analizados: {total_datos:,} registros de producción\n"
-            f"📅 Período: {años_sorted[0]} - {años_sorted[-1]} ({años_unicos} años)\n"
+            f"📅 Período: {años_sorted[0]} - {años_sorted[-1]} ({años_unicos} campañas)\n"
             f"🌾 Producción total: {produccion_total:,.0f} toneladas\n\n"
             f"🏆 MEJOR MODELO: {best_model_name}\n"
             f"   • Parámetros óptimos: {best_result['params']}\n"
