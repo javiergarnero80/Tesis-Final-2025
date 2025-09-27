@@ -13,7 +13,7 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import StandardScaler, LabelEncoder, MinMaxScaler
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans, DBSCAN
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestRegressor
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import SVR
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -1172,6 +1172,9 @@ class DataAnalyzer:
 
         # Filtrar valores válidos
         df_trabajo = df_trabajo.dropna(subset=['año_numerico'])
+        if len(df_trabajo) < 10:
+            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos después del procesamiento de las campañas.")
+            return
         df_trabajo['año_numerico'] = df_trabajo['año_numerico'].astype(int)
 
         X = df_trabajo[['año_numerico']].values
@@ -1208,7 +1211,7 @@ class DataAnalyzer:
                 }
             },
             'Random Forest': {
-                'model': RandomForestClassifier(random_state=42),
+                'model': RandomForestRegressor(random_state=42),
                 'params': {
                     'n_estimators': [50, 100, 200],
                     'max_depth': [None, 10, 20],
