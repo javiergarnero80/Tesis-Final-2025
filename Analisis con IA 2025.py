@@ -478,50 +478,156 @@ class DataAnalyzer:
         messagebox.showinfo("Producción Total por Provincia", f"Gráfica guardada en {output_file}\n\n{explanation}")
 
     def evolucion_cultivos_por_campaña(self):
-        """Genera un gráfico de la evolución de los cultivos por campaña."""
+        """Genera un gráfico de la evolución de los cultivos por campaña con nombres limpios y legibles."""
         if self.df.empty or 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campaña' y 'cultivo'.")
             return
 
-        self.df['cultivo'] = self.df['cultivo'].apply(DataPreprocessing.normalize_text)
+        # Limpiar nombres de cultivos sin normalizar (mantener nombres originales legibles)
+        df_trabajo = self.df.copy()
+        df_trabajo['cultivo'] = df_trabajo['cultivo'].astype(str).str.strip().str.title()
+        
+        # Verificar columnas de interés
         columnas_interes = ['sup_sembrada', 'sup_cosechada', 'produccion']
-        columnas_presentes = [col for col in columnas_interes if col in self.df.columns]
+        columnas_presentes = [col for col in columnas_interes if col in df_trabajo.columns]
         if not columnas_presentes:
             messagebox.showwarning("Advertencia", f"El archivo CSV debe contener al menos una de las columnas: {', '.join(columnas_interes)}.")
             return
 
-        self.df['campaña'] = pd.to_datetime(self.df['campaña'], errors='coerce')
-        self.df['año'] = self.df['campaña'].dt.year
+        # Procesar fechas de campaña de manera más robusta
+        try:
+            # Intentar diferentes formatos de fecha
+            if df_trabajo['campaña'].dtype == 'object':
+                # Si es texto, intentar extraer el año
+                df_trabajo['año'] = df_trabajo['campaña'].astype(str).str.extract(r'(\d{4})').astype(float)
+            else:
+                # Si es numérico, usar directamente
+                df_trabajo['año'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+            
+            # Filtrar años válidos
+            df_trabajo = df_trabajo.dropna(subset=['año'])
+            df_trabajo['año'] = df_trabajo['año'].astype(int)
+            
+        except Exception as e:
+            logging.error(f"Error procesando fechas de campaña: {e}")
+            messagebox.showerror("Error", "No se pudieron procesar las fechas de campaña correctamente.")
+            return
 
-        cultivo_seleccionado = self.ask_option("Seleccionar Cultivo", "Seleccione el cultivo:", self.df['cultivo'].unique())
+        if df_trabajo.empty:
+            messagebox.showwarning("Advertencia", "No se encontraron datos válidos después del procesamiento.")
+            return
+
+        # Obtener cultivos únicos y limpios
+        cultivos_disponibles = sorted(df_trabajo['cultivo'].dropna().unique())
+        
+        if len(cultivos_disponibles) == 0:
+            messagebox.showwarning("Advertencia", "No se encontraron cultivos válidos en los datos.")
+            return
+
+        # Seleccionar cultivo
+        cultivo_seleccionado = self.ask_option("Seleccionar Cultivo", "Seleccione el cultivo:", cultivos_disponibles)
         if not cultivo_seleccionado:
             return
 
-        df_filtrado = self.df[self.df['cultivo'] == cultivo_seleccionado]
+        # Filtrar datos para el cultivo seleccionado
+        df_filtrado = df_trabajo[df_trabajo['cultivo'] == cultivo_seleccionado]
         if df_filtrado.empty:
             messagebox.showwarning("Advertencia", f"No se encontraron datos para el cultivo seleccionado: {cultivo_seleccionado}.")
             return
 
-        plt.figure(figsize=(12, 8))
-        for columna in columnas_presentes:
-            df_filtrado.groupby('año')[columna].sum().plot(label=columna)
+        # Crear visualización mejorada
+        plt.figure(figsize=(14, 10))
+        
+        # Agrupar por año y sumar valores
+        datos_agrupados = df_filtrado.groupby('año')[columnas_presentes].sum()
+        
+        if datos_agrupados.empty:
+            messagebox.showwarning("Advertencia", "No hay datos suficientes para generar el gráfico.")
+            return
 
-        plt.title(f"Evolución del Cultivo {cultivo_seleccionado} por Campaña")
-        plt.xlabel("Año")
-        plt.ylabel("Cantidad")
-        plt.legend()
+        # Crear subgráficos si hay múltiples columnas
+        if len(columnas_presentes) > 1:
+            fig, axes = plt.subplots(len(columnas_presentes), 1, figsize=(14, 4*len(columnas_presentes)))
+            if len(columnas_presentes) == 1:
+                axes = [axes]
+            
+            for i, columna in enumerate(columnas_presentes):
+                axes[i].plot(datos_agrupados.index, datos_agrupados[columna],
+                           marker='o', linewidth=2, markersize=6, label=columna)
+                axes[i].set_title(f'Evolución de {columna.replace("_", " ").title()} - {cultivo_seleccionado}')
+                axes[i].set_xlabel('Año')
+                axes[i].set_ylabel(columna.replace("_", " ").title())
+                axes[i].grid(True, alpha=0.3)
+                axes[i].legend()
+                
+                # Agregar valores en los puntos
+                for x, y in zip(datos_agrupados.index, datos_agrupados[columna]):
+                    axes[i].annotate(f'{y:,.0f}', (x, y), textcoords="offset points",
+                                   xytext=(0,10), ha='center', fontsize=8)
+        else:
+            # Un solo gráfico si hay una sola columna
+            columna = columnas_presentes[0]
+            plt.plot(datos_agrupados.index, datos_agrupados[columna],
+                    marker='o', linewidth=3, markersize=8, color='steelblue')
+            plt.title(f'Evolución de {columna.replace("_", " ").title()} - {cultivo_seleccionado}', fontsize=14)
+            plt.xlabel('Año', fontsize=12)
+            plt.ylabel(columna.replace("_", " ").title(), fontsize=12)
+            plt.grid(True, alpha=0.3)
+            
+            # Agregar valores en los puntos
+            for x, y in zip(datos_agrupados.index, datos_agrupados[columna]):
+                plt.annotate(f'{y:,.0f}', (x, y), textcoords="offset points",
+                           xytext=(0,10), ha='center', fontsize=10, fontweight='bold')
+
         plt.suptitle("evolucion_cultivos_por_campaña", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
         plt.tight_layout()
 
-        evolucion_file = OUTPUT_DIR / f"evolucion_cultivo_{cultivo_seleccionado}.png"
-        plt.savefig(evolucion_file)
+        # Crear nombre de archivo seguro
+        cultivo_filename = re.sub(r'[^\w\s-]', '', cultivo_seleccionado).strip().replace(' ', '_')
+        evolucion_file = OUTPUT_DIR / f"evolucion_cultivo_{cultivo_filename}.png"
+        plt.savefig(evolucion_file, dpi=300, bbox_inches='tight')
         plt.show()
         logging.info(f"Gráfica de evolución de cultivo guardada en {evolucion_file}")
 
+        # Análisis adicional
+        años_analizados = len(datos_agrupados)
+        año_inicial = datos_agrupados.index.min()
+        año_final = datos_agrupados.index.max()
+        
+        # Calcular tendencias
+        tendencias = {}
+        for columna in columnas_presentes:
+            if len(datos_agrupados) > 1:
+                valor_inicial = datos_agrupados[columna].iloc[0]
+                valor_final = datos_agrupados[columna].iloc[-1]
+                if valor_inicial > 0:
+                    cambio_porcentual = ((valor_final - valor_inicial) / valor_inicial) * 100
+                    tendencias[columna] = cambio_porcentual
+                else:
+                    tendencias[columna] = 0
+
+        tendencias_texto = ""
+        for columna, cambio in tendencias.items():
+            direccion = "📈 Crecimiento" if cambio > 5 else "📉 Declive" if cambio < -5 else "➡️ Estable"
+            tendencias_texto += f"   • {columna.replace('_', ' ').title()}: {direccion} ({cambio:+.1f}%)\n"
+
         explanation = (
-            f"Este informe muestra la evolución del cultivo {cultivo_seleccionado} a lo largo de las campañas. "
-            "Puede ayudar a entender cómo ha variado la superficie sembrada, cosechada o la producción a lo largo del tiempo."
+            f"📊 EVOLUCIÓN DEL CULTIVO: {cultivo_seleccionado.upper()}\n\n"
+            f"📅 Período analizado: {año_inicial} - {año_final} ({años_analizados} años)\n"
+            f"📈 Variables analizadas: {', '.join([col.replace('_', ' ').title() for col in columnas_presentes])}\n\n"
+            f"📊 TENDENCIAS IDENTIFICADAS:\n{tendencias_texto}\n"
+            f"💡 INTERPRETACIÓN:\n"
+            f"   • Este gráfico muestra la evolución temporal del cultivo {cultivo_seleccionado}\n"
+            f"   • Permite identificar patrones de crecimiento, declive o estabilidad\n"
+            f"   • Los valores en cada punto muestran las cantidades exactas por año\n"
+            f"   • Útil para planificación agrícola y toma de decisiones estratégicas\n\n"
+            f"📋 APLICACIONES PRÁCTICAS:\n"
+            f"   • Identificación de años de alta/baja productividad\n"
+            f"   • Análisis de impacto de factores climáticos o económicos\n"
+            f"   • Planificación de siembra basada en tendencias históricas\n"
+            f"   • Evaluación de la viabilidad del cultivo a largo plazo"
         )
+        
         messagebox.showinfo("Evolución de Cultivo por Campaña", f"Gráfica guardada en {evolucion_file}\n\n{explanation}")
 
     def tendencias_produccion_por_cultivo(self):
