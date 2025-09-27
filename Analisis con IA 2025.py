@@ -1162,9 +1162,17 @@ class DataAnalyzer:
             messagebox.showwarning("Advertencia", "Se necesitan al menos 10 registros para el análisis predictivo.")
             return
 
-        # Convertir campaña a valores numéricos para el análisis
-        df_trabajo['año_numerico'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+        # Convertir campaña a valores numéricos para el análisis (manejar formato "2023/2024")
+        try:
+            # Intentar convertir campañas al formato usado en otras funciones
+            df_trabajo['año_numerico'] = df_trabajo['campaña'].astype(str).str.split('/').str[0].astype(int)
+        except (ValueError, AttributeError):
+            # Si no funciona, intentar conversión directa
+            df_trabajo['año_numerico'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+
+        # Filtrar valores válidos
         df_trabajo = df_trabajo.dropna(subset=['año_numerico'])
+        df_trabajo['año_numerico'] = df_trabajo['año_numerico'].astype(int)
 
         X = df_trabajo[['año_numerico']].values
         y = df_trabajo['produccion'].values
