@@ -105,6 +105,12 @@ class DataAnalyzer:
         self.root.geometry("600x400")
         self.df = pd.DataFrame()
         self.setup_menu()
+    def _check_csv_loaded(self):
+        """Verifica si el CSV está cargado y muestra un mensaje si no lo está."""
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "Por favor cargue un archivo CSV primero.")
+            return False
+        return True
 
     def setup_menu(self):
         """Configura el menú de la aplicación."""
@@ -144,8 +150,7 @@ class DataAnalyzer:
 
     def sumar_columnas(self):
         """Realiza un análisis estadístico integral de las variables numéricas del dataset agrícola."""
-        if self.df.empty:
-            messagebox.showwarning("Advertencia", "Por favor cargue un archivo CSV primero.")
+        if not self._check_csv_loaded():
             return
 
         # Obtener columnas numéricas
@@ -280,36 +285,34 @@ class DataAnalyzer:
         outliers_texto = "\n".join(outliers_info[:5]) if outliers_info else "No se detectaron valores atípicos significativos"
         
         explanation = (
-            f"📊 ANÁLISIS ESTADÍSTICO INTEGRAL DE VARIABLES NUMÉRICAS\n\n"
-            f"🔍 Datos analizados: {len(df_numeric):,} registros válidos\n"
-            f"📈 Variables numéricas: {len(numeric_cols)} columnas\n\n"
-            f"🏆 VARIABLES DESTACADAS:\n"
-            f"   • Mayor volumen total: {variable_mayor_suma} ({suma_columnas[variable_mayor_suma]:,.0f})\n"
-            f"   • Más variable: {variable_mayor_variabilidad} (CV: {coef_variacion[variable_mayor_variabilidad]:.1f}%)\n"
-            f"   • Más estable: {variable_mas_estable} (CV: {coef_variacion[variable_mas_estable]:.1f}%)\n\n"
-            f"📊 ESTADÍSTICAS CLAVE:\n"
-            f"   • Promedio general: {df_numeric.mean().mean():,.1f}\n"
-            f"   • Desviación estándar promedio: {df_numeric.std().mean():,.1f}\n"
-            f"   • Coeficiente de variación promedio: {coef_variacion.mean():.1f}%\n\n"
-            f"🔗 CORRELACIONES IMPORTANTES:\n{correlaciones_texto}\n\n"
-            f"⚠️ VALORES ATÍPICOS DETECTADOS:\n{outliers_texto}\n\n"
-            f"💡 INTERPRETACIÓN PARA TESIS:\n"
-            f"   • Las variables con mayor volumen indican los aspectos más significativos del dataset\n"
-            f"   • El coeficiente de variación revela la estabilidad/volatilidad de cada variable\n"
-            f"   • Las correlaciones fuertes sugieren relaciones causales o dependencias\n"
-            f"   • Los valores atípicos pueden indicar casos especiales o errores de medición\n\n"
-            f"📋 APLICACIONES PRÁCTICAS:\n"
-            f"   • Identificación de variables clave para modelos predictivos\n"
-            f"   • Detección de inconsistencias en los datos\n"
-            f"   • Priorización de variables para análisis posteriores\n"
-            f"   • Fundamentación estadística para decisiones metodológicas"
+            f"📊 ANÁLISIS DE SUMA DE COLUMNAS\n\n"
+            f"Este análisis suma todas las columnas numéricas de tus datos agrícolas y calcula estadísticas básicas.\n\n"
+            f"🔍 Lo que se analizó: {len(df_numeric):,} registros con datos completos\n"
+            f"📈 Columnas numéricas encontradas: {len(numeric_cols)}\n\n"
+            f"🏆 RESULTADOS PRINCIPALES:\n"
+            f"   • La columna con mayor suma total es: {variable_mayor_suma} (total: {suma_columnas[variable_mayor_suma]:,.0f})\n"
+            f"   • La columna más variable es: {variable_mayor_variabilidad} (cambia mucho)\n"
+            f"   • La columna más estable es: {variable_mas_estable} (cambia poco)\n\n"
+            f"📊 NÚMEROS BÁSICOS:\n"
+            f"   • Promedio general de todas las columnas: {df_numeric.mean().mean():,.1f}\n"
+            f"   • Valores que se salen de lo normal encontrados: {outliers_texto}\n\n"
+            f"💡 ¿QUÉ SIGNIFICA ESTO?\n"
+            f"   • Las columnas con números más grandes son las más importantes en tus datos\n"
+            f"   • Si una columna cambia mucho, es menos predecible\n"
+            f"   • Los valores atípicos pueden ser errores o casos especiales\n\n"
+            f"📋 PARA QUÉ SIRVE:\n"
+            f"   • Saber cuáles son las variables más importantes\n"
+            f"   • Detectar problemas en los datos\n"
+            f"   • Decidir qué analizar primero"
         )
         
         messagebox.showinfo("Análisis Estadístico Integral", f"Análisis completado y guardado en {output_file}\n\n{explanation}")
 
     def analisis_temporal(self):
         """Genera un análisis temporal de la producción."""
-        if self.df.empty or 'campaña' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'campaña' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener la columna 'campaña'.")
             return
 
@@ -358,8 +361,7 @@ class DataAnalyzer:
 
     def analisis_correlacion(self):
         """Genera una matriz de correlación entre las columnas numéricas del DataFrame."""
-        if self.df.empty:
-            messagebox.showwarning("Advertencia", "El DataFrame está vacío. Por favor, cargue un archivo CSV primero.")
+        if not self._check_csv_loaded():
             return
 
         if self.df.select_dtypes(include=[float, int]).empty:
@@ -379,14 +381,29 @@ class DataAnalyzer:
         logging.info(f"Matriz de correlación guardada en {correlacion_file}")
 
         explanation = (
-            "Esta matriz de correlación muestra la relación entre todas las columnas numéricas del DataFrame. "
-            "Es útil para identificar variables que están fuertemente correlacionadas y aquellas que no lo están, lo cual puede ayudar en el análisis predictivo y la toma de decisiones."
+            "📊 ANÁLISIS DE CORRELACIÓN\n\n"
+            "Esta gráfica muestra cómo se relacionan las variables numéricas entre sí.\n\n"
+            "🔍 ¿QUÉ VER?\n"
+            "   • Números cercanos a 1 o -1: variables muy relacionadas\n"
+            "   • Números cercanos a 0: variables poco relacionadas\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Saber qué variables van juntas (ej: más siembra = más producción)\n"
+            "   • Ayudar a predecir una variable usando otra\n"
+            "   • Entender mejor tus datos agrícolas"
         )
         messagebox.showinfo("Análisis de Correlación", f"Matriz de correlación guardada en {correlacion_file}\n\n{explanation}")
 
     def correlacion_sup_sembrada_cosechada(self):
-        """Calcula y muestra la correlación entre superficie sembrada y cosechada."""
-        if self.df.empty or 'provincia' not in self.df.columns or 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns:
+        """
+        Calcula y visualiza la correlación entre superficie sembrada y cosechada.
+
+        Esta función permite seleccionar una provincia y analiza la relación
+        entre lo sembrado y lo cosechado, proporcionando insights para optimizar
+        la eficiencia agrícola.
+        """
+        if not self._check_csv_loaded():
+            return
+        if 'provincia' not in self.df.columns or 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'provincia', 'sup_sembrada' y 'sup_cosechada'.")
             return
 
@@ -414,9 +431,30 @@ class DataAnalyzer:
         try:
             correlacion = df_provincia[['sup_sembrada', 'sup_cosechada']].corr().iloc[0, 1]
             suggestion = self.get_correlation_suggestion(correlacion)
+
+            # Crear gráfico de dispersión para mayor claridad
+            plt.figure(figsize=(8, 6))
+            plt.scatter(df_provincia['sup_sembrada'], df_provincia['sup_cosechada'], alpha=0.6, color='blue')
+            plt.title(f'Correlación entre Superficie Sembrada y Cosechada\nProvincia: {selected_provincia}')
+            plt.xlabel('Superficie Sembrada (hectáreas)')
+            plt.ylabel('Superficie Cosechada (hectáreas)')
+            plt.grid(True, alpha=0.3)
+
+            # Agregar línea de tendencia
+            z = np.polyfit(df_provincia['sup_sembrada'], df_provincia['sup_cosechada'], 1)
+            p = np.poly1d(z)
+            plt.plot(df_provincia['sup_sembrada'], p(df_provincia['sup_sembrada']), "r--", alpha=0.8)
+
+            plt.suptitle("correlacion_sup_sembrada_cosechada", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+            output_file = OUTPUT_DIR / f"correlacion_{self.safe_file_name(selected_provincia)}.png"
+            plt.savefig(output_file)
+            plt.show()
+
             explanation = (
-                f"La correlación entre la superficie sembrada y cosechada en la provincia seleccionada es {correlacion:.2f}. "
-                f"{suggestion}"
+                f"La correlación entre la superficie sembrada y cosechada en la provincia {selected_provincia} es {correlacion:.2f}. "
+                f"{suggestion}\n\n"
+                f"📊 Datos analizados: {len(df_provincia)} registros\n"
+                f"📈 Gráfico guardado en: {output_file}"
             )
             messagebox.showinfo("Correlación Sup. Sembrada-Sup. Cosechada", explanation)
         except Exception as e:
@@ -427,15 +465,24 @@ class DataAnalyzer:
     def get_correlation_suggestion(correlacion):
         """Devuelve una sugerencia basada en el valor de la correlación."""
         if correlacion >= 0.7:
-            return "Correlación alta. Sugerencia: Explorar variedades de cultivos que optimicen la superficie cosechada."
+            return ("Correlación alta positiva. Esto significa que cuando se siembra más superficie, "
+                    "generalmente se cosecha más. Sugerencia: Mantener prácticas actuales y explorar "
+                    "variedades de cultivos de alto rendimiento para maximizar la producción por hectárea.")
         elif correlacion <= 0.3:
-            return "Correlación baja. Sugerencia: Revisar prácticas de cultivo y factores ambientales."
+            return ("Correlación baja. Esto indica que factores externos (clima, plagas, suelo) "
+                    "pueden estar causando pérdidas entre siembra y cosecha. Sugerencia: Revisar "
+                    "prácticas de cultivo, mejorar manejo de factores ambientales y considerar "
+                    "técnicas de conservación.")
         else:
-            return "Correlación moderada. Considerar diversificación de cultivos."
+            return ("Correlación moderada. La relación entre siembra y cosecha es variable. "
+                    "Sugerencia: Considerar diversificación de cultivos para reducir riesgos "
+                    "y mejorar la estabilidad de la producción.")
 
     def produccion_total_por_provincia(self):
         """Genera una gráfica de la producción total por provincia."""
-        if self.df.empty or 'provincia' not in self.df.columns or 'produccion' not in self.df.columns or 'campaña' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'provincia' not in self.df.columns or 'produccion' not in self.df.columns or 'campaña' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'provincia', 'produccion' y 'campaña'.")
             return
 
@@ -471,15 +518,23 @@ class DataAnalyzer:
         Visualization.plot_bar_chart(produccion_por_provincia, title, "Provincias", "Producción [Tn]", output_file, "produccion_total_por_provincia")
 
         explanation = (
-            "Este informe muestra la producción total de cultivos por provincia para la campaña seleccionada. "
-            "Permite identificar qué provincias tienen mayor y menor producción, lo cual puede ayudar en la toma de decisiones "
-            "para la distribución de recursos y planificación agrícola."
+            "📊 PRODUCCIÓN POR PROVINCIA\n\n"
+            "Esta gráfica muestra cuánto produce cada provincia en la campaña seleccionada.\n\n"
+            "🔍 ¿QUÉ VER?\n"
+            "   • Provincias con barras más altas = más producción\n"
+            "   • Provincias con barras más bajas = menos producción\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Saber dónde se produce más\n"
+            "   • Decidir dónde invertir recursos\n"
+            "   • Planificar distribución de ayuda agrícola"
         )
         messagebox.showinfo("Producción Total por Provincia", f"Gráfica guardada en {output_file}\n\n{explanation}")
 
     def evolucion_cultivos_por_campaña(self):
         """Genera un gráfico de la evolución de los cultivos por campaña con nombres limpios y legibles."""
-        if self.df.empty or 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campaña' y 'cultivo'.")
             return
 
@@ -612,27 +667,27 @@ class DataAnalyzer:
             tendencias_texto += f"   • {columna.replace('_', ' ').title()}: {direccion} ({cambio:+.1f}%)\n"
 
         explanation = (
-            f"📊 EVOLUCIÓN DEL CULTIVO: {cultivo_seleccionado.upper()}\n\n"
-            f"📅 Período analizado: {año_inicial} - {año_final} ({años_analizados} años)\n"
-            f"📈 Variables analizadas: {', '.join([col.replace('_', ' ').title() for col in columnas_presentes])}\n\n"
-            f"📊 TENDENCIAS IDENTIFICADAS:\n{tendencias_texto}\n"
-            f"💡 INTERPRETACIÓN:\n"
-            f"   • Este gráfico muestra la evolución temporal del cultivo {cultivo_seleccionado}\n"
-            f"   • Permite identificar patrones de crecimiento, declive o estabilidad\n"
-            f"   • Los valores en cada punto muestran las cantidades exactas por año\n"
-            f"   • Útil para planificación agrícola y toma de decisiones estratégicas\n\n"
-            f"📋 APLICACIONES PRÁCTICAS:\n"
-            f"   • Identificación de años de alta/baja productividad\n"
-            f"   • Análisis de impacto de factores climáticos o económicos\n"
-            f"   • Planificación de siembra basada en tendencias históricas\n"
-            f"   • Evaluación de la viabilidad del cultivo a largo plazo"
+            f"📈 EVOLUCIÓN DEL CULTIVO: {cultivo_seleccionado.upper()}\n\n"
+            f"📅 Años estudiados: {año_inicial} - {año_final}\n"
+            f"📊 Variables mostradas: {', '.join([col.replace('_', ' ').title() for col in columnas_presentes])}\n\n"
+            f"📈 TENDENCIAS:\n{tendencias_texto}\n"
+            f"💡 ¿QUÉ MUESTRA?\n"
+            f"   • Cómo ha cambiado este cultivo a lo largo del tiempo\n"
+            f"   • Si está creciendo, bajando o se mantiene igual\n"
+            f"   • Los números exactos por cada año\n\n"
+            f"📋 PARA QUÉ SIRVE:\n"
+            f"   • Saber si vale la pena seguir sembrando este cultivo\n"
+            f"   • Planificar siembras basadas en el pasado\n"
+            f"   • Ver el impacto de clima o economía"
         )
         
         messagebox.showinfo("Evolución de Cultivo por Campaña", f"Gráfica guardada en {evolucion_file}\n\n{explanation}")
 
     def tendencias_produccion_por_cultivo(self):
         """Genera un gráfico de tendencias de producción por cultivo y campaña mejorado."""
-        if self.df.empty or 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns or 'produccion' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campaña', 'cultivo' y 'produccion'.")
             return
 
@@ -742,34 +797,33 @@ class DataAnalyzer:
                 cultivo_mas_variable = max(variabilidad_cultivos, key=variabilidad_cultivos.get)
 
         explanation = (
-            f"📊 ANÁLISIS DE TENDENCIAS DE PRODUCCIÓN POR CULTIVO\n\n"
-            f"🔍 Datos analizados: {len(df_valid):,} registros de producción\n"
-            f"🌱 Cultivos analizados: {len(df_valid['cultivo'].unique())}\n"
-            f"📅 Campañas analizadas: {len(df_valid['campaña'].unique())}\n\n"
-            f"🏆 Top 3 Cultivos por Producción Total:\n"
-            f"   1. {produccion_total_por_cultivo.index[0]}: {produccion_total_por_cultivo.iloc[0]:,.0f} toneladas\n"
-            f"   2. {produccion_total_por_cultivo.index[1]}: {produccion_total_por_cultivo.iloc[1]:,.0f} toneladas\n"
-            f"   3. {produccion_total_por_cultivo.index[2]}: {produccion_total_por_cultivo.iloc[2]:,.0f} toneladas\n\n"
-            f"📈 Análisis de Estabilidad:\n"
-            f"   🟢 Cultivo más estable: {cultivo_mas_estable if cultivo_mas_estable else 'No disponible'}\n"
-            f"   🔴 Cultivo más variable: {cultivo_mas_variable if cultivo_mas_variable else 'No disponible'}\n\n"
-            f"💡 ¿Qué muestran estos gráficos?\n"
-            f"   • Evolución temporal de cada cultivo principal\n"
-            f"   • Comparación de volúmenes de producción\n"
-            f"   • Tendencia general del sector agrícola\n"
-            f"   • Identificación de cultivos estables vs volátiles\n\n"
-            f"📋 Utilidad práctica:\n"
-            f"   • Planificación basada en tendencias históricas\n"
-            f"   • Identificación de cultivos en crecimiento/declive\n"
-            f"   • Gestión de riesgos por variabilidad\n"
-            f"   • Diversificación estratégica de cultivos"
+            f"🌾 TENDENCIAS DE PRODUCCIÓN POR CULTIVO\n\n"
+            f"📊 Datos revisados: {len(df_valid):,} registros\n"
+            f"🌱 Tipos de cultivos: {len(df_valid['cultivo'].unique())}\n\n"
+            f"🏆 CULTIVOS MÁS PRODUCTIVOS:\n"
+            f"   1. {produccion_total_por_cultivo.index[0]}: {produccion_total_por_cultivo.iloc[0]:,.0f} ton\n"
+            f"   2. {produccion_total_por_cultivo.index[1]}: {produccion_total_por_cultivo.iloc[1]:,.0f} ton\n"
+            f"   3. {produccion_total_por_cultivo.index[2]}: {produccion_total_por_cultivo.iloc[2]:,.0f} ton\n\n"
+            f"📈 ESTABILIDAD:\n"
+            f"   🟢 Más estable: {cultivo_mas_estable if cultivo_mas_estable else 'No disponible'}\n"
+            f"   🔴 Más variable: {cultivo_mas_variable if cultivo_mas_variable else 'No disponible'}\n\n"
+            f"💡 ¿QUÉ MUESTRAN LOS GRÁFICOS?\n"
+            f"   • Cómo cambia la producción de cada cultivo con el tiempo\n"
+            f"   • Cuáles cultivos producen más\n"
+            f"   • Cuáles son predecibles y cuáles cambian mucho\n\n"
+            f"📋 USO PRÁCTICO:\n"
+            f"   • Elegir cultivos confiables para sembrar\n"
+            f"   • Diversificar para reducir riesgos\n"
+            f"   • Planificar inversiones agrícolas"
         )
         
         messagebox.showinfo("Tendencias de Producción por Cultivo", f"Gráfica guardada en {tendencias_file}\n\n{explanation}")
 
     def modelos_predictivos(self):
         """Entrena y evalúa un modelo de regresión lineal."""
-        if self.df.empty or 'sup_sembrada' not in self.df.columns or 'produccion' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'sup_sembrada' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener 'sup_sembrada' y 'produccion'.")
             return
 
@@ -789,9 +843,16 @@ class DataAnalyzer:
         r2 = r2_score(y_test, y_pred)
 
         explanation = (
-            f"Este análisis utiliza un modelo de regresión lineal para predecir la producción en función de la superficie sembrada. "
-            f"El error cuadrático medio (MSE) es {mse:.2f}, lo que indica el promedio de los errores cuadrados entre los valores predichos y reales. "
-            f"El coeficiente de determinación (R2) es {r2:.2f}, lo que muestra qué tan bien los datos se ajustan al modelo."
+            f"📈 MODELO PREDICTIVO SIMPLE\n\n"
+            f"Este análisis usa un modelo matemático simple para predecir la producción agrícola "
+            f"basándose en la superficie sembrada.\n\n"
+            f"🔍 RESULTADOS:\n"
+            f"   • Error promedio del modelo: {mse:.0f} (más bajo es mejor)\n"
+            f"   • Precisión del modelo: {r2:.2f} (más cerca de 1 es mejor)\n\n"
+            f"💡 ¿QUÉ SIGNIFICA?\n"
+            f"   • Si el error es bajo y la precisión alta, el modelo predice bien\n"
+            f"   • Si no, puede que necesites más datos o variables diferentes\n\n"
+            f"📋 USO: Ayuda a estimar producción futura basada en superficie sembrada"
         )
         messagebox.showinfo("Modelo Predictivo", explanation)
 
@@ -800,7 +861,9 @@ class DataAnalyzer:
         columnas_requeridas = ['cultivo']
         columnas_opcionales = ['sup_sembrada', 'sup_cosechada', 'produccion', 'rendimiento', 'provincia']
         
-        if self.df.empty or 'cultivo' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'cultivo' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener la columna 'cultivo'.")
             return
 
@@ -923,7 +986,9 @@ class DataAnalyzer:
         columnas_opcionales = ['provincia', 'campaña', 'departamento']
         
         # Verificar columnas requeridas
-        if self.df.empty or not all(col in self.df.columns for col in columnas_requeridas):
+        if not self._check_csv_loaded():
+            return
+        if not all(col in self.df.columns for col in columnas_requeridas):
             messagebox.showwarning("Advertencia", "El DataFrame debe contener la columna 'produccion'.")
             return
 
@@ -1124,7 +1189,9 @@ class DataAnalyzer:
 
     def clasificacion_texto_ia(self):
         """Clasifica textos en el DataFrame utilizando un modelo de IA."""
-        if self.df.empty or 'texto' not in self.df.columns or 'categoria' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'texto' not in self.df.columns or 'categoria' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'texto' y 'categoria'.")
             return
 
@@ -1145,14 +1212,22 @@ class DataAnalyzer:
         accuracy = classifier.score(X_test, y_test)
 
         explanation = (
-            f"Este análisis clasifica automáticamente los textos en función de su contenido utilizando un modelo de Naive Bayes. "
-            f"La precisión del modelo es del {accuracy:.2f}, lo que indica la proporción de predicciones correctas realizadas por el modelo."
+            f"📝 CLASIFICACIÓN DE TEXTOS CON IA\n\n"
+            f"Este análisis lee textos y los clasifica automáticamente en categorías usando IA.\n\n"
+            f"🔍 RESULTADO:\n"
+            f"   • Precisión del sistema: {accuracy:.2f} (más cerca de 1 = mejor)\n\n"
+            f"💡 ¿CÓMO FUNCIONA?\n"
+            f"   • La IA aprende qué palabras van con qué categorías\n"
+            f"   • Luego clasifica nuevos textos automáticamente\n\n"
+            f"📋 USO: Organizar textos agrícolas por temas o tipos"
         )
         messagebox.showinfo("Clasificación de Texto con IA", explanation)
 
     def prediccion_tendencias_ia(self):
         """Realiza predicción avanzada de tendencias agrícolas usando múltiples algoritmos de IA con optimización de hiperparámetros."""
-        if self.df.empty or 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'campaña' y 'produccion'.")
             return
 
@@ -1396,42 +1471,30 @@ class DataAnalyzer:
             cambio_total = 0
 
         explanation = (
-            f"🤖 ANÁLISIS PREDICTIVO AVANZADO CON IA\n\n"
-            f"📊 Datos analizados: {total_datos:,} registros de producción\n"
-            f"📅 Período: {años_sorted[0]} - {años_sorted[-1]} ({años_unicos} campañas)\n"
-            f"🌾 Producción total: {produccion_total:,.0f} toneladas\n\n"
-            f"🏆 MEJOR MODELO: {best_model_name}\n"
-            f"   • Parámetros óptimos: {best_result['params']}\n"
-            f"   • R² (precisión): {best_result['r2']:.3f}\n"
-            f"   • RMSE (error): {best_result['rmse']:.0f} toneladas\n"
-            f"   • MAE (error absoluto): {best_result['mae']:.0f} toneladas\n\n"
-            f"📈 COMPARACIÓN DE MODELOS:\n"
-        )
-
-        for name, result in results.items():
-            icon = "🏆" if name == best_model_name else "📊"
-            explanation += f"   {icon} {name}: R²={result['r2']:.3f}, RMSE={result['rmse']:.0f}\n"
-
-        explanation += (
-            f"\n🔮 PREDICCIONES FUTURAS (5 años):\n"
+            f"🤖 PREDICCIÓN DE TENDENCIAS CON IA\n\n"
+            f"📊 Datos usados: {total_datos:,} registros de producción agrícola\n"
+            f"📅 Años analizados: {años_sorted[0]} - {años_sorted[-1]}\n"
+            f"🌾 Producción total histórica: {produccion_total:,.0f} toneladas\n\n"
+            f"🏆 MEJOR MÉTODO ENCONTRADO: {best_model_name}\n"
+            f"   • Precisión del modelo: {best_result['r2']:.2f} (más cerca de 1 = mejor)\n"
+            f"   • Error promedio: {best_result['rmse']:.0f} toneladas\n\n"
+            f"🔮 PREDICCIONES PARA LOS PRÓXIMOS 5 AÑOS:\n"
             f"   • {años_futuros[0]}: {y_futuro[0]:,.0f} toneladas\n"
             f"   • {años_futuros[1]}: {y_futuro[1]:,.0f} toneladas\n"
             f"   • {años_futuros[2]}: {y_futuro[2]:,.0f} toneladas\n"
             f"   • {años_futuros[3]}: {y_futuro[3]:,.0f} toneladas\n"
             f"   • {años_futuros[4]}: {y_futuro[4]:,.0f} toneladas\n\n"
-            f"📊 ANÁLISIS DE TENDENCIAS:\n"
-            f"   • Cambio total en el período: {cambio_total:+.1f}%\n"
-            f"   • Tendencia: {'📈 Crecimiento' if cambio_total > 5 else '📉 Declive' if cambio_total < -5 else '➡️ Estable'}\n\n"
-            f"🎯 INTERPRETACIÓN PARA TESIS:\n"
-            f"   • El modelo {best_model_name} explica el {best_result['r2']*100:.1f}% de la variabilidad en producción\n"
-            f"   • Las predicciones futuras muestran {('continuidad' if abs(cambio_total) < 10 else 'cambio significativo')}\n"
-            f"   • La IA identifica patrones no lineales que métodos tradicionales no capturan\n"
-            f"   • Los errores de predicción ({best_result['rmse']:.0f} ton) indican precisión aceptable\n\n"
-            f"💡 APLICACIONES PRÁCTICAS:\n"
-            f"   • Planificación agrícola basada en predicciones precisas\n"
-            f"   • Optimización de recursos con proyecciones futuras\n"
-            f"   • Gestión de riesgos con escenarios predictivos\n"
-            f"   • Toma de decisiones estratégicas fundamentada en IA"
+            f"📈 TENDENCIA GENERAL:\n"
+            f"   • Cambio en el período estudiado: {cambio_total:+.1f}%\n"
+            f"   • Dirección: {'📈 Producción subiendo' if cambio_total > 5 else '📉 Producción bajando' if cambio_total < -5 else '➡️ Producción estable'}\n\n"
+            f"💡 ¿QUÉ SIGNIFICA ESTO?\n"
+            f"   • La IA encontró patrones en tus datos históricos\n"
+            f"   • Las predicciones te ayudan a planificar el futuro\n"
+            f"   • Si la precisión es buena, puedes confiar en las estimaciones\n\n"
+            f"📋 PARA QUÉ USARLO:\n"
+            f"   • Planificar cuánta superficie sembrar\n"
+            f"   • Decidir inversiones en agricultura\n"
+            f"   • Prepararte para años buenos o malos"
         )
 
         messagebox.showinfo("Predicción Avanzada de Tendencias con IA",
@@ -1439,25 +1502,35 @@ class DataAnalyzer:
 
     def analisis_predictivo_nn(self):
         """Realiza un análisis predictivo utilizando una red neuronal simple."""
-        if self.df.empty or 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns or 'rendimiento' not in self.df.columns or 'produccion' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns or 'rendimiento' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'sup_sembrada', 'sup_cosechada', 'rendimiento' y 'produccion'.")
             return
 
-        # Preparar datos
-        features = self.df[['sup_sembrada', 'sup_cosechada', 'rendimiento']]
-        target = self.df['produccion']
+        # Limpiar datos eliminando filas con NaN
+        df_clean = self.df.dropna(subset=['sup_sembrada', 'sup_cosechada', 'rendimiento', 'produccion'])
+        if len(df_clean) < 10:
+            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos después de eliminar valores NaN.")
+            return
 
-        # Escalado de características
-        scaler = MinMaxScaler()
-        features_scaled = scaler.fit_transform(features)
-        target_scaled = scaler.fit_transform(target.values.reshape(-1, 1)).ravel()
+        # Preparar datos
+        features = df_clean[['sup_sembrada', 'sup_cosechada', 'rendimiento']]
+        target = df_clean['produccion']
+
+        # Escalado de características con scalers separados
+        scaler_features = MinMaxScaler()
+        scaler_target = MinMaxScaler()
+        features_scaled = scaler_features.fit_transform(features)
+        target_scaled = scaler_target.fit_transform(target.values.reshape(-1, 1)).ravel()
 
         # Dividir datos
         X_train, X_test, y_train, y_test = train_test_split(features_scaled, target_scaled, test_size=0.2, random_state=42)
 
         # Construir modelo de red neuronal
         model = tf.keras.models.Sequential([
-            tf.keras.layers.Dense(10, activation='relu', input_shape=(3,)),
+            tf.keras.layers.Input(shape=(3,)),
+            tf.keras.layers.Dense(10, activation='relu'),
             tf.keras.layers.Dense(8, activation='relu'),
             tf.keras.layers.Dense(1)
         ])
@@ -1466,28 +1539,43 @@ class DataAnalyzer:
         model.compile(optimizer='adam', loss='mean_squared_error')
 
         # Entrenar modelo
-        model.fit(X_train, y_train, epochs=100, validation_split=0.2)
+        model.fit(X_train, y_train, epochs=100, validation_split=0.2, verbose=0)
 
         # Evaluar modelo
-        loss = model.evaluate(X_test, y_test)
+        loss = model.evaluate(X_test, y_test, verbose=0)
         logging.info(f"Pérdida en el conjunto de prueba: {loss}")
 
         # Predicciones
-        predictions = model.predict(X_test)
-        predictions_rescaled = scaler.inverse_transform(predictions)  # Reescalar las predicciones al rango original
+        predictions_scaled = model.predict(X_test, verbose=0)
+        predictions_rescaled = scaler_target.inverse_transform(predictions_scaled).ravel()
 
         # Mostrar algunas predicciones
         logging.info(f"Algunas predicciones reescaladas: {predictions_rescaled[:5]}")
+        logging.info(f"Valores reales correspondientes: {scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel()[:5]}")
+
+        # Calcular métricas adicionales
+        mse = mean_squared_error(scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel(), predictions_rescaled)
+        r2 = r2_score(scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel(), predictions_rescaled)
 
         explanation = (
-            "Este análisis utiliza una red neuronal simple para predecir la producción basada en la superficie sembrada, "
-            "superficie cosechada y rendimiento. Las predicciones se reescalan al rango original para interpretación."
+            f"🧠 PREDICCIÓN CON RED NEURONAL\n\n"
+            f"Este análisis usa una 'red neuronal' (como un cerebro artificial) para predecir la producción agrícola "
+            f"usando superficie sembrada, cosechada y rendimiento.\n\n"
+            f"🔍 RESULTADOS:\n"
+            f"   • Error del modelo: {mse:.0f} (más bajo = mejor predicción)\n"
+            f"   • Precisión: {r2:.2f} (más cerca de 1 = más preciso)\n\n"
+            f"💡 ¿QUÉ ES UNA RED NEURONAL?\n"
+            f"   • Un sistema de IA que aprende patrones complejos\n"
+            f"   • Útil cuando las relaciones no son simples\n\n"
+            f"📋 USO: Predecir producción basada en múltiples variables"
         )
         messagebox.showinfo("Análisis Predictivo con Red Neuronal", explanation)
 
     def geocodificar_direcciones(self):
         """Geocodifica direcciones con barra de progreso moderna y guarda las coordenadas en el DataFrame."""
-        if self.df.empty or 'departamento' not in self.df.columns or 'provincia' not in self.df.columns or 'pais' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'departamento' not in self.df.columns or 'provincia' not in self.df.columns or 'pais' not in self.df.columns:
             messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'departamento', 'provincia' y 'pais'.")
             return
 
@@ -1622,9 +1710,16 @@ class DataAnalyzer:
         progress_window.destroy()
 
         explanation = (
-            "Este proceso geocodifica las direcciones de las localidades con una barra de progreso moderna, "
-            "agregando coordenadas geográficas (latitud y longitud) al DataFrame. "
-            "Esto es útil para análisis geoespaciales y visualización de datos en mapas."
+            "🗺️ GEOCODIFICACIÓN DE DIRECCIONES\n\n"
+            "Este proceso convierte direcciones de texto en coordenadas GPS (latitud y longitud).\n\n"
+            "🔍 ¿QUÉ HACE?\n"
+            "   • Toma direcciones como 'Provincia X, País Y'\n"
+            "   • Las convierte en números de ubicación\n"
+            "   • Agrega columnas de Latitude y Longitude\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Crear mapas con tus datos\n"
+            "   • Ver dónde están ubicadas las cosas\n"
+            "   • Análisis geográfico de producción agrícola"
         )
         
         messagebox.showinfo("Geocodificación", 
@@ -1636,7 +1731,9 @@ class DataAnalyzer:
 
     def generar_mapa(self):
         """Genera un mapa con las direcciones geocodificadas."""
-        if self.df.empty or 'Latitude' not in self.df.columns or'Longitude' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'Latitude' not in self.df.columns or 'Longitude' not in self.df.columns:
             messagebox.showwarning("Advertencia", "Por favor, geocodifique las direcciones primero.")
             return
 
@@ -1657,14 +1754,23 @@ class DataAnalyzer:
         webbrowser.open(mapa_file.resolve().as_uri())
 
         explanation = (
-            "Este informe genera un mapa interactivo con las direcciones geocodificadas. "
-            "Es útil para visualizar la distribución geográfica de los datos y realizar análisis espaciales."
+            "🗺️ MAPA GEOESPACIAL\n\n"
+            "Este análisis crea un mapa interactivo con puntos en las ubicaciones de tus datos.\n\n"
+            "🔍 ¿QUÉ VERÁS?\n"
+            "   • Puntos en el mapa = ubicaciones de tus datos\n"
+            "   • Al hacer clic en un punto = información del lugar\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Ver dónde se produce más agricultura\n"
+            "   • Identificar patrones geográficos\n"
+            "   • Planificar distribución de recursos"
         )
         messagebox.showinfo("Generar Mapa", f"Mapa generado exitosamente.\n\n{explanation}")
 
     def produccion_top_cultivos(self):
         """Genera un gráfico de líneas para los 4 principales cultivos por producción total."""
-        if self.df.empty or 'cultivo' not in self.df.columns or 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
+        if not self._check_csv_loaded():
+            return
+        if 'cultivo' not in self.df.columns or 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
             messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'cultivo', 'campaña' y 'produccion'.")
             return
 
@@ -1698,8 +1804,16 @@ class DataAnalyzer:
         logging.info(f"Gráfica de producción de los 4 principales cultivos guardada en {output_file}")
 
         explanation = (
-            "Este análisis muestra la evolución de la producción de los 4 principales cultivos a lo largo de las campañas. "
-            "Permite visualizar cuáles cultivos han tenido mayor producción en diferentes períodos, ayudando en la planificación y toma de decisiones."
+            "🌱 PRODUCCIÓN DE LOS 4 CULTIVOS PRINCIPALES\n\n"
+            "Esta gráfica muestra cómo ha cambiado la producción de los cultivos más importantes con el tiempo.\n\n"
+            "🔍 ¿QUÉ VER?\n"
+            "   • Líneas que suben = producción aumentando\n"
+            "   • Líneas que bajan = producción disminuyendo\n"
+            "   • Cada color representa un cultivo diferente\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Saber qué cultivos están de moda\n"
+            "   • Planificar qué sembrar en el futuro\n"
+            "   • Tomar decisiones de inversión"
         )
         messagebox.showinfo("Producción Top Cultivos", f"Gráfica guardada en {output_file}\n\n{explanation}")
 
