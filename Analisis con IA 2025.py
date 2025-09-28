@@ -24,6 +24,8 @@ import folium
 import webbrowser
 import tensorflow as tf
 import numpy as np
+import requests
+import os
 
 # Configuración del registro
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -134,7 +136,6 @@ class DataAnalyzer:
         self.analisis_menu.add_command(label="Producción Total por Provincia", command=self.produccion_total_por_provincia)
         self.analisis_menu.add_command(label="Evolución de Cultivos por Campaña", command=self.evolucion_cultivos_por_campaña)
         self.analisis_menu.add_command(label="Tendencias de Producción por Cultivo", command=self.tendencias_produccion_por_cultivo)
-        self.analisis_menu.add_command(label="Clasificación de Texto con IA", command=self.clasificacion_texto_ia)
         self.analisis_menu.add_command(label="Predicción de Tendencias con IA", command=self.prediccion_tendencias_ia)
         self.analisis_menu.add_command(label="Análisis Predictivo con Red Neuronal", command=self.analisis_predictivo_nn)
         self.analisis_menu.add_command(label="Producción Top Cultivos", command=self.produccion_top_cultivos)
@@ -1187,41 +1188,6 @@ class DataAnalyzer:
         
         messagebox.showinfo("Análisis de Riesgos Agrícolas", explanation)
 
-    def clasificacion_texto_ia(self):
-        """Clasifica textos en el DataFrame utilizando un modelo de IA."""
-        if not self._check_csv_loaded():
-            return
-        if 'texto' not in self.df.columns or 'categoria' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'texto' y 'categoria'.")
-            return
-
-        X = self.df['texto'].apply(DataPreprocessing.normalize_text).values
-        y = self.df['categoria'].values
-
-        # Vectorización del texto
-        vectorizer = TfidfVectorizer()
-        X_vectorized = vectorizer.fit_transform(X)
-
-        X_train, X_test, y_train, y_test = train_test_split(X_vectorized, y, test_size=0.2, random_state=42)
-
-        # Clasificación con Naive Bayes
-        classifier = MultinomialNB()
-        classifier.fit(X_train, y_train)
-        y_pred = classifier.predict(X_test)
-
-        accuracy = classifier.score(X_test, y_test)
-
-        explanation = (
-            f"📝 CLASIFICACIÓN DE TEXTOS CON IA\n\n"
-            f"Este análisis lee textos y los clasifica automáticamente en categorías usando IA.\n\n"
-            f"🔍 RESULTADO:\n"
-            f"   • Precisión del sistema: {accuracy:.2f} (más cerca de 1 = mejor)\n\n"
-            f"💡 ¿CÓMO FUNCIONA?\n"
-            f"   • La IA aprende qué palabras van con qué categorías\n"
-            f"   • Luego clasifica nuevos textos automáticamente\n\n"
-            f"📋 USO: Organizar textos agrícolas por temas o tipos"
-        )
-        messagebox.showinfo("Clasificación de Texto con IA", explanation)
 
     def prediccion_tendencias_ia(self):
         """Realiza predicción avanzada de tendencias agrícolas usando múltiples algoritmos de IA con optimización de hiperparámetros."""
@@ -1252,6 +1218,12 @@ class DataAnalyzer:
             return
         df_trabajo['año_numerico'] = df_trabajo['año_numerico'].astype(int)
 
+        # Limitar el tamaño del dataset para evitar tiempos de procesamiento excesivos
+        max_samples = 1000
+        if len(df_trabajo) > max_samples:
+            df_trabajo = df_trabajo.sample(n=max_samples, random_state=42)
+            logging.info(f"Dataset limitado a {max_samples} muestras para optimización de rendimiento.")
+
         X = df_trabajo[['año_numerico']].values
         y = df_trabajo['produccion'].values
 
@@ -1266,31 +1238,23 @@ class DataAnalyzer:
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
         X_train_orig, X_test_orig, y_train_orig, y_test_orig = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Definir modelos y parámetros para comparación
+        # Definir modelos y parámetros para comparación (optimizado para velocidad)
         models = {
             'SVR RBF': {
                 'model': SVR(),
                 'params': {
                     'kernel': ['rbf'],
-                    'C': [0.1, 1, 10, 100],
-                    'gamma': ['scale', 'auto', 0.01, 0.1, 1],
-                    'epsilon': [0.01, 0.1, 0.2]
-                }
-            },
-            'SVR Lineal': {
-                'model': SVR(),
-                'params': {
-                    'kernel': ['linear'],
-                    'C': [0.1, 1, 10, 100],
-                    'epsilon': [0.01, 0.1, 0.2]
+                    'C': [1, 10],  # Reducido
+                    'gamma': ['scale', 0.1],  # Reducido
+                    'epsilon': [0.1]  # Reducido
                 }
             },
             'Random Forest': {
                 'model': RandomForestRegressor(random_state=42),
                 'params': {
-                    'n_estimators': [50, 100, 200],
-                    'max_depth': [None, 10, 20],
-                    'min_samples_split': [2, 5, 10]
+                    'n_estimators': [50, 100],  # Reducido
+                    'max_depth': [None, 10],  # Reducido
+                    'min_samples_split': [2, 5]  # Reducido
                 }
             }
         }
@@ -1305,13 +1269,14 @@ class DataAnalyzer:
 
         for name, config in models.items():
             try:
-                # Grid Search con validación cruzada
+                # Grid Search con validación cruzada (optimizado)
                 grid_search = GridSearchCV(
                     config['model'],
                     config['params'],
-                    cv=5,
+                    cv=3,  # Reducido de 5 a 3 para mayor velocidad
                     scoring='neg_mean_squared_error',
-                    n_jobs=-1
+                    n_jobs=1,  # Cambiado a 1 para evitar problemas de paralelización
+                    verbose=1  # Agregado para mostrar progreso
                 )
 
                 grid_search.fit(X_train, y_train)
@@ -1817,12 +1782,13 @@ class DataAnalyzer:
         )
         messagebox.showinfo("Producción Top Cultivos", f"Gráfica guardada en {output_file}\n\n{explanation}")
 
+
     def mostrar_dialogo_informes(self):
         """Muestra un cuadro de diálogo para seleccionar y generar informes."""
         informes = ["Producción Total por Provincia", "Correlación Sup. Sembrada-Sup. Cosechada", "Sumar Columnas", 
                     "Análisis Temporal", "Análisis de Correlación", "Modelos Predictivos", 
                     "Clasificación de Cultivos", "Análisis de Riesgos", "Evolución de Cultivos por Campaña", 
-                    "Tendencias de Producción por Cultivo", "Clasificación de Texto con IA", "Predicción de Tendencias con IA", 
+                    "Tendencias de Producción por Cultivo", "Predicción de Tendencias con IA",
                     "Análisis Predictivo con Red Neuronal", "Producción Top Cultivos"]
 
         selected_informe = self.ask_option("Generar Informe", "Seleccione el informe a generar:", informes)
@@ -1843,7 +1809,6 @@ class DataAnalyzer:
             "Análisis de Riesgos": "analisis_riesgos",
             "Evolución de Cultivos por Campaña": "evolucion_cultivos_por_campaña",
             "Tendencias de Producción por Cultivo": "tendencias_produccion_por_cultivo",
-            "Clasificación de Texto con IA": "clasificacion_texto_ia",
             "Predicción de Tendencias con IA": "prediccion_tendencias_ia",
             "Análisis Predictivo con Red Neuronal": "analisis_predictivo_nn",
             "Producción Top Cultivos": "produccion_top_cultivos",
