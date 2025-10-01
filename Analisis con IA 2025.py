@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox, ttk
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+from matplotlib.ticker import FuncFormatter
 from pathlib import Path
 import logging
 from time import sleep
@@ -27,12 +28,230 @@ import numpy as np
 import requests
 import os
 
-# Configuración del registro
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+# Logging configuration
+logging.basicConfig(level=logging.INFO,
+                   format='%(asctime)s - %(levelname)s - %(message)s')
 
 # Directorio de salida
 OUTPUT_DIR = Path("output")
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+# Carpeta específica para figuras de la tesis
+FIGS_TESIS_DIR = OUTPUT_DIR / "figs_tesis"
+FIGS_TESIS_DIR.mkdir(parents=True, exist_ok=True)
+
+def human_readable_magnitude(value, _):
+    """Formatea valores numéricos con sufijos (K, M, B) para ejes académicos."""
+    abs_value = abs(value)
+    if abs_value >= 1_000_000_000:
+        return f"{value / 1_000_000_000:.1f}B"
+    if abs_value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if abs_value >= 1_000:
+        return f"{value / 1_000:.1f}K"
+    return f"{value:,.0f}"
+
+def bootstrap_mean_ci(series, n_boot=2000, ci=95, rng=None):
+    """
+    Calcula un intervalo de confianza bootstrap para la media de una serie.
+
+    Parameters
+    ----------
+    series : pandas.Series
+        Serie numérica sin valores NaN para replicar.
+    n_boot : int, optional
+        Cantidad de réplicas bootstrap a generar. Por defecto 2000.
+    ci : int, optional
+        Nivel de confianza (en porcentaje). Por defecto 95.
+    rng : numpy.random.Generator, optional
+        Generador de números aleatorios para reproducibilidad.
+
+    Returns
+    -------
+    tuple[float, float]
+        Valores (lower, upper) correspondientes al intervalo de confianza.
+    """
+    clean_data = series.dropna().to_numpy()
+    if clean_data.size == 0:
+        return (np.nan, np.nan)
+
+    rng = rng or np.random.default_rng(42)
+    resamples = rng.choice(clean_data, size=(n_boot, clean_data.size), replace=True)
+    boot_means = resamples.mean(axis=1)
+    alpha = (100 - ci) / 2
+    lower = np.percentile(boot_means, alpha)
+    upper = np.percentile(boot_means, 100 - alpha)
+    return (lower, upper)
+
+def sumar_columnas(df, cols):
+    """Genera reportes visuales y opcionalmente guarda gráficos estadísticos para columnas numéricas.
+
+    Parámetros:
+        df (pandas.DataFrame): DataFrame con los datos a analizar.
+        cols (list): Lista de columnas numéricas a analizar.
+
+    Descripción:
+        Esta función muestra 4 gráficos académicos sobre los datos numéricos en una figura con 4 subplots:
+        1. Fig01_totales.png: Barras de totales acumulados (ordenadas de mayor a menor).
+        2. Fig02_promedios.png: Barras de promedios con intervalos de confianza al 95%.
+        3. Fig03_cv.png: Coeficiente de variación por variable.
+        4. Fig04_min_prom_max.png: Comparación Min-Promedio-Máximo.
+
+        Los gráficos se muestran en pantalla en una sola ventana. Después, se pide confirmación en consola para guardar.
+        Si se responde 's', se solicita carpeta de destino y se guardan a 300 dpi.
+        Si 'n', no se guarda nada.
+        Estilo gráfico académico: barras ordenadas mayor a menor, ejes con K/M/B, títulos y etiquetas claras, colores sobrios (azul, verde, gris).
+
+    Notas:
+        - Utiliza bootstrap para calcular intervalos de confianza del 95%.
+        - Maneja errores de entrada y proporciona validaciones robustas.
+        - Adecuado para tesis académicas y análisis profesional.
+    """
+    # Validar la entrada y quedarnos solo con las columnas numéricas disponibles en el DataFrame.
+    if df is None or df.empty:
+        raise ValueError("El DataFrame no contiene información para analizar.")
+
+    numeric_cols = [col for col in cols if col in df.columns and pd.api.types.is_numeric_dtype(df[col])]
+    if not numeric_cols:
+        raise ValueError("La lista de columnas no contiene variables numéricas válidas.")
+
+    data = df[numeric_cols].dropna()
+    if data.empty:
+        raise ValueError("No hay registros completos disponibles para las columnas indicadas.")
+
+    # Preparar estilo y orden de las variables por importancia (suma descendente).
+    sns.set_theme(style="whitegrid", context="notebook")  # Mejor para tesis
+    plt.rcParams['font.family'] = 'serif'  # Fuente serif académica
+    plt.rcParams['font.size'] = 10  # Tamaño de fuente consistente
+    totals = data.sum().sort_values(ascending=False)
+    ordered_cols = totals.index.tolist()
+
+    # Calcular estadísticos claves alineados al orden definido.
+    means = data[ordered_cols].mean()
+    stds = data[ordered_cols].std()
+    mean_safe = means.replace(0, np.nan)  # Evita divisiones por cero al calcular el CV.
+    cv = (stds / mean_safe) * 100
+    mins = data[ordered_cols].min()
+    maxs = data[ordered_cols].max()
+
+    # Configurar formato de etiquetas del eje X.
+    def _format_xticklabels(axis):
+        for label in axis.get_xticklabels():
+            label.set_rotation(45)
+            label.set_horizontalalignment('right')
+            label.set_fontsize(9)
+
+    # Calcular intervalos de confianza bootstrap para cada columna.
+    lower_errors = []
+    upper_errors = []
+    for col in ordered_cols:
+        lower_ci, upper_ci = bootstrap_mean_ci(data[col])
+        lower_errors.append(max(0, means[col] - lower_ci) if not np.isnan(lower_ci) else 0)
+        upper_errors.append(max(0, upper_ci - means[col]) if not np.isnan(upper_ci) else 0)
+
+    # Configurar matplotlib para modo interactivo y evitar bloqueo de tkinter
+    plt.ion()  # Activar modo interactivo
+    plt.show(block=False)  # No bloquear
+
+    # Crear figura única con 4 subplots para mostrar todos los gráficos juntos.
+    fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+    fig.suptitle("Análisis Estadístico Integral de Variables Numéricas", fontsize=18, fontweight='bold', y=0.98)
+
+    # Subplot 1: Totales acumulados por columna (ordenados descendente).
+    bars1 = ax1.bar(ordered_cols, totals.values, color="#4C72B0", edgecolor="black", alpha=0.9)
+    ax1.set_title("a) Totales acumulados por variable", fontsize=14, fontweight='bold', pad=20)
+    ax1.set_xlabel("Variables numéricas", fontsize=11)
+    ax1.set_ylabel("Totales", fontsize=11)
+    ax1.yaxis.set_major_formatter(FuncFormatter(human_readable_magnitude))
+    ax1.grid(axis='y', linestyle='--', alpha=0.5)
+    ax1.margins(x=0.05)
+    _format_xticklabels(ax1)
+    for bar in bars1:
+        height = bar.get_height()
+        ax1.annotate(human_readable_magnitude(height, None),
+                     xy=(bar.get_x() + bar.get_width() / 2, height),
+                     xytext=(0, 7), textcoords="offset points",
+                     ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+    # Subplot 2: Promedios con intervalo de confianza al 95%.
+    bars2 = ax2.bar(ordered_cols, means.values, color="#55A868", edgecolor="black", alpha=0.9,
+                    yerr=[lower_errors, upper_errors], capsize=4, ecolor="#2E8B57")
+    ax2.set_title("b) Promedios con intervalo de confianza 95%", fontsize=14, fontweight='bold', pad=20)
+    ax2.set_xlabel("Variables numéricas", fontsize=11)
+    ax2.set_ylabel("Promedios", fontsize=11)
+    ax2.yaxis.set_major_formatter(FuncFormatter(human_readable_magnitude))
+    ax2.grid(axis='y', linestyle='--', alpha=0.5)
+    ax2.margins(x=0.05)
+    _format_xticklabels(ax2)
+    for bar in bars2:
+        height = bar.get_height()
+        if height > 0:
+            ax2.annotate(human_readable_magnitude(height, None),
+                         xy=(bar.get_x() + bar.get_width() / 2, height),
+                         xytext=(0, 7), textcoords="offset points",
+                         ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+    # Subplot 3: Coeficiente de variación.
+    bars3 = ax3.bar(ordered_cols, cv.values, color="#7F7F7F", edgecolor="black", alpha=0.9)
+    ax3.set_title("c) Coeficiente de variación", fontsize=14, fontweight='bold', pad=20)
+    ax3.set_xlabel("Variables numéricas", fontsize=11)
+    ax3.set_ylabel("CV (%)", fontsize=11)
+    ax3.grid(axis='y', linestyle='--', alpha=0.5)
+    ax3.margins(x=0.05)
+    _format_xticklabels(ax3)
+    ax3.axhline(y=50, color="#4C72B0", linestyle="--", linewidth=2, alpha=0.8, label="Variabilidad moderada")
+    ax3.axhline(y=100, color="#55A868", linestyle="--", linewidth=2, alpha=0.8, label="Alta variabilidad")
+    ax3.legend(fontsize=9, loc='upper right')
+    for bar in bars3:
+        height = bar.get_height()
+        ax3.annotate(f"{height:.1f}%", xy=(bar.get_x() + bar.get_width() / 2, height),
+                     xytext=(0, 7), textcoords="offset points",
+                     ha='center', va='bottom', fontsize=9, fontweight='bold')
+
+    # Subplot 4: Comparación Min-Promedio-Máximo con barras agrupadas.
+    width = 0.25
+    x_pos = np.arange(len(ordered_cols))
+    ax4.bar(x_pos - width, mins.values, width, label="Mínimo", color="#4C72B0", edgecolor="black", alpha=0.9)
+    ax4.bar(x_pos, means.values, width, label="Promedio", color="#55A868", edgecolor="black", alpha=0.9)
+    ax4.bar(x_pos + width, maxs.values, width, label="Máximo", color="#7F7F7F", edgecolor="black", alpha=0.9)
+    ax4.set_title("d) Comparación.min-prm-max", fontsize=14, fontweight='bold', pad=20)
+    ax4.set_xlabel("Variables numéricas", fontsize=11)
+    ax4.set_ylabel("Valores", fontsize=11)
+    ax4.yaxis.set_major_formatter(FuncFormatter(human_readable_magnitude))
+    ax4.set_xticks(x_pos)
+    ax4.set_xticklabels(ordered_cols, rotation=45, ha='right')
+    ax4.grid(axis='y', linestyle='--', alpha=0.5)
+    ax4.legend(fontsize=9, loc='upper left')
+    ax4.margins(x=0.05)
+
+    # Ajustar layout para evitar superposiciones.
+    fig.tight_layout()
+    plt.subplots_adjust(top=0.88, hspace=0.4, wspace=0.25)
+
+    # Mostrar la figura completa con los 4 gráficos.
+    plt.show()
+
+    # Consultar al usuario si desea guardar los gráficos.
+    respuesta = input("¿Desea guardar los gráficos como PNG? (s/n): ").strip().lower()
+    while respuesta not in {"s", "n"}:
+        respuesta = input("Respuesta no válida. Ingrese 's' para sí o 'n' para no: ").strip().lower()
+
+    if respuesta == "s":
+        carpeta = input("Ingrese la carpeta donde desea guardar los gráficos: ").strip()
+        while not carpeta:
+            carpeta = input("La ruta no puede estar vacía. Ingrese la carpeta destino: ").strip()
+        destino = Path(carpeta).expanduser()
+        destino.mkdir(parents=True, exist_ok=True)
+        for nombre, figura in figures:
+            figura.savefig(destino / nombre, dpi=300, bbox_inches='tight')
+        print(f"Gráficos guardados en {destino}")
+    else:
+        print("Los gráficos no se guardaron.")
+
+    # Cerrar las figuras para liberar memoria en sesiones iterativas.
+    for _, figura in figures:
+        plt.close(figura)
+
 
 # Geolocalizador con configuración mejorada
 geolocator = Nominatim(user_agent="analisis_agricola_app/1.0")
@@ -48,6 +267,8 @@ class FileHandler:
             try:
                 df = pd.read_csv(file_path)
                 df.columns = df.columns.str.strip()  # Limpiar espacios en blanco de los nombres de columnas
+                # Normalizar nombres de columnas para manejar acentos y mayúsculas/minúsculas
+                df.columns = df.columns.str.normalize('NFD').str.encode('ascii', 'ignore').str.decode('utf-8').str.lower()
                 logging.info(f"Archivo CSV cargado: {file_path}")
                 messagebox.showinfo("Cargar CSV", "Archivo CSV cargado exitosamente.")
                 return df
@@ -144,6 +365,7 @@ class DataAnalyzer:
         self.menu.add_cascade(label="Geocodificación", menu=self.geocodificacion_menu)
         self.geocodificacion_menu.add_command(label="Geocodificar Direcciones", command=self.geocodificar_direcciones)
         self.geocodificacion_menu.add_command(label="Generar Mapa", command=self.generar_mapa)
+        self.geocodificacion_menu.add_command(label="Mapa de Distribución de Cultivos", command=self.mapa_distribucion_cultivos)
 
     def cargar_csv(self):
         """Carga un archivo CSV utilizando la clase FileHandler."""
@@ -156,14 +378,14 @@ class DataAnalyzer:
 
         # Obtener columnas numéricas
         numeric_cols = self.df.select_dtypes(include=[float, int]).columns.tolist()
-        
+
         if not numeric_cols:
             messagebox.showwarning("Advertencia", "No se encontraron columnas numéricas para analizar.")
             return
 
         # Filtrar datos válidos (sin NaN)
         df_numeric = self.df[numeric_cols].dropna()
-        
+
         if len(df_numeric) < 10:
             messagebox.showwarning("Advertencia", "No hay suficientes datos válidos para el análisis estadístico.")
             return
@@ -174,15 +396,15 @@ class DataAnalyzer:
         mediana_columnas = df_numeric.median()
         desviacion_columnas = df_numeric.std()
         coef_variacion = (desviacion_columnas / df_numeric.mean()) * 100
-        
+
         # Identificar variables más importantes
         variable_mayor_suma = suma_columnas.idxmax()
         variable_mayor_variabilidad = coef_variacion.idxmax()
         variable_mas_estable = coef_variacion.idxmin()
-        
+
         # Crear visualización mejorada con múltiples subgráficos
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-        
+
         # Gráfico 1: Totales por variable (suma)
         suma_columnas.plot(kind='bar', ax=ax1, color='lightblue', edgecolor='navy')
         ax1.set_title('Totales Acumulados por Variable')
@@ -190,11 +412,11 @@ class DataAnalyzer:
         ax1.set_ylabel('Suma Total')
         ax1.tick_params(axis='x', rotation=45)
         ax1.grid(True, alpha=0.3)
-        
+
         # Agregar valores en las barras
         for i, v in enumerate(suma_columnas.values):
             ax1.text(i, v + v*0.01, f'{v:,.0f}', ha='center', va='bottom', fontsize=8, fontweight='bold')
-        
+
         # Gráfico 2: Promedios por variable
         promedios = df_numeric.mean()
         promedios.plot(kind='bar', ax=ax2, color='lightgreen', edgecolor='darkgreen')
@@ -203,11 +425,11 @@ class DataAnalyzer:
         ax2.set_ylabel('Promedio')
         ax2.tick_params(axis='x', rotation=45)
         ax2.grid(True, alpha=0.3)
-        
+
         # Agregar valores en las barras
         for i, v in enumerate(promedios.values):
             ax2.text(i, v + v*0.01, f'{v:,.1f}', ha='center', va='bottom', fontsize=8, fontweight='bold')
-        
+
         # Gráfico 3: Coeficiente de variación (estabilidad)
         colores_cv = ['red' if cv > 100 else 'orange' if cv > 50 else 'green' for cv in coef_variacion.values]
         coef_variacion.plot(kind='bar', ax=ax3, color=colores_cv, edgecolor='black')
@@ -219,26 +441,26 @@ class DataAnalyzer:
         ax3.axhline(y=50, color='orange', linestyle='--', alpha=0.7, label='Variabilidad Media (50%)')
         ax3.axhline(y=100, color='red', linestyle='--', alpha=0.7, label='Alta Variabilidad (100%)')
         ax3.legend()
-        
+
         # Agregar valores en las barras
         for i, v in enumerate(coef_variacion.values):
             ax3.text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
-        
+
         # Gráfico 4: Comparación Min-Max-Promedio
         variables_principales = suma_columnas.nlargest(6).index  # Top 6 variables
         df_principales = df_numeric[variables_principales]
-        
+
         x_pos = np.arange(len(variables_principales))
         width = 0.25
-        
+
         mins = df_principales.min()
         maxs = df_principales.max()
         means = df_principales.mean()
-        
+
         ax4.bar(x_pos - width, mins, width, label='Mínimo', color='lightcoral', alpha=0.8)
         ax4.bar(x_pos, means, width, label='Promedio', color='lightskyblue', alpha=0.8)
         ax4.bar(x_pos + width, maxs, width, label='Máximo', color='lightgreen', alpha=0.8)
-        
+
         ax4.set_title('Comparación Min-Promedio-Max (Top 6 Variables)')
         ax4.set_xlabel('Variables Principales')
         ax4.set_ylabel('Valores')
@@ -246,16 +468,16 @@ class DataAnalyzer:
         ax4.set_xticklabels(variables_principales, rotation=45)
         ax4.legend()
         ax4.grid(True, alpha=0.3)
-        
+
         plt.suptitle("sumar_columnas", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
         plt.tight_layout()
-        
+
         # Guardar gráfico
         output_file = OUTPUT_DIR / "analisis_estadistico_integral.png"
         plt.savefig(output_file, dpi=300, bbox_inches='tight')
         plt.show()
         logging.info(f"Análisis estadístico integral guardado en {output_file}")
-        
+
         # Análisis de correlaciones entre variables principales
         correlaciones_importantes = []
         if len(variables_principales) > 1:
@@ -268,7 +490,7 @@ class DataAnalyzer:
                         var1 = corr_matrix.columns[i]
                         var2 = corr_matrix.columns[j]
                         correlaciones_importantes.append(f"{var1} ↔ {var2}: {corr_val:.3f}")
-        
+
         # Identificar outliers usando el método IQR
         outliers_info = []
         for col in variables_principales:
@@ -280,33 +502,35 @@ class DataAnalyzer:
             outliers = df_numeric[(df_numeric[col] < lower_bound) | (df_numeric[col] > upper_bound)][col]
             if len(outliers) > 0:
                 outliers_info.append(f"{col}: {len(outliers)} valores atípicos ({len(outliers)/len(df_numeric)*100:.1f}%)")
-        
+
         # Crear reporte detallado
         correlaciones_texto = "\n".join(correlaciones_importantes[:5]) if correlaciones_importantes else "No se encontraron correlaciones fuertes (>0.7)"
         outliers_texto = "\n".join(outliers_info[:5]) if outliers_info else "No se detectaron valores atípicos significativos"
-        
+
         explanation = (
-            f"📊 ANÁLISIS DE SUMA DE COLUMNAS\n\n"
-            f"Este análisis suma todas las columnas numéricas de tus datos agrícolas y calcula estadísticas básicas.\n\n"
+            "📊 ANÁLISIS DE SUMA DE COLUMNAS\n\n"
+            "Este análisis suma todas las columnas numéricas de tus datos "
+            "agrícolas y calcula estadísticas básicas.\n\n"
             f"🔍 Lo que se analizó: {len(df_numeric):,} registros con datos completos\n"
             f"📈 Columnas numéricas encontradas: {len(numeric_cols)}\n\n"
-            f"🏆 RESULTADOS PRINCIPALES:\n"
-            f"   • La columna con mayor suma total es: {variable_mayor_suma} (total: {suma_columnas[variable_mayor_suma]:,.0f})\n"
+            "🏆 RESULTADOS PRINCIPALES:\n"
+            f"   • La columna con mayor suma total es: {variable_mayor_suma} "
+            f"(total: {suma_columnas[variable_mayor_suma]:,.0f})\n"
             f"   • La columna más variable es: {variable_mayor_variabilidad} (cambia mucho)\n"
             f"   • La columna más estable es: {variable_mas_estable} (cambia poco)\n\n"
-            f"📊 NÚMEROS BÁSICOS:\n"
+            "📊 NÚMEROS BÁSICOS:\n"
             f"   • Promedio general de todas las columnas: {df_numeric.mean().mean():,.1f}\n"
             f"   • Valores que se salen de lo normal encontrados: {outliers_texto}\n\n"
-            f"💡 ¿QUÉ SIGNIFICA ESTO?\n"
-            f"   • Las columnas con números más grandes son las más importantes en tus datos\n"
-            f"   • Si una columna cambia mucho, es menos predecible\n"
-            f"   • Los valores atípicos pueden ser errores o casos especiales\n\n"
-            f"📋 PARA QUÉ SIRVE:\n"
-            f"   • Saber cuáles son las variables más importantes\n"
-            f"   • Detectar problemas en los datos\n"
-            f"   • Decidir qué analizar primero"
+            "💡 ¿QUÉ SIGNIFICA ESTO?\n"
+            "   • Las columnas con números más grandes son las más importantes en tus datos\n"
+            "   • Si una columna cambia mucho, es menos predecible\n"
+            "   • Los valores atípicos pueden ser errores o casos especiales\n\n"
+            "📋 PARA QUÉ SIRVE:\n"
+            "   • Saber cuáles son las variables más importantes\n"
+            "   • Detectar problemas en los datos\n"
+            "   • Decidir qué analizar primero"
         )
-        
+
         messagebox.showinfo("Análisis Estadístico Integral", f"Análisis completado y guardado en {output_file}\n\n{explanation}")
 
     def analisis_temporal(self):
@@ -361,38 +585,240 @@ class DataAnalyzer:
         plt.show()
 
     def analisis_correlacion(self):
-        """Genera una matriz de correlación entre las columnas numéricas del DataFrame."""
+        """Genera análisis de correlación con diseño profesional y limpio."""
         if not self._check_csv_loaded():
             return
 
-        if self.df.select_dtypes(include=[float, int]).empty:
+        numeric_df = self.df.select_dtypes(include=[float, int])
+        if numeric_df.empty:
             messagebox.showwarning("Advertencia", "No hay columnas numéricas para analizar.")
             return
 
-        plt.figure(figsize=(10, 8))
-        correlation_matrix = self.df.select_dtypes(include=[float, int]).corr()
-        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
-        plt.title("Matriz de Correlación")
-        plt.suptitle("analisis_correlacion", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
-        plt.tight_layout()
+        # Calcular matriz de correlación
+        correlation_matrix = numeric_df.corr()
 
-        correlacion_file = OUTPUT_DIR / "matriz_correlacion.png"
-        plt.savefig(correlacion_file)
+        # Crear figura principal con diseño profesional
+        fig = plt.figure(figsize=(18, 12), facecolor='white')
+        fig.suptitle('ANÁLISIS DE CORRELACIÓN AGRÍCOLA',
+                    fontsize=24, fontweight='bold', y=0.95,
+                    color='#2C3E50', family='Arial')
+
+        # ==========================================
+        # GRÁFICO 1: DICCIONARIO LIMPIO Y PROFESIONAL
+        # ==========================================
+        ax1 = plt.subplot(2, 2, 1)
+        ax1.set_facecolor('#F8F9FA')
+        ax1.spines['top'].set_visible(False)
+        ax1.spines['right'].set_visible(False)
+        ax1.spines['left'].set_color('#CCCCCC')
+        ax1.spines['bottom'].set_color('#CCCCCC')
+
+        ax1.text(0.5, 0.95, 'GUÍA DE INTERPRETACIÓN',
+                ha='center', va='top', fontsize=16, fontweight='bold', color='#2C3E50')
+        ax1.text(0.5, 0.85, 'Aprende a interpretar los coeficientes de correlación',
+                ha='center', va='top', fontsize=10, color='#7F8C8D')
+
+        # Crear diccionario más limpio y profesional
+        correlations_info = [
+            ("CORRELACIÓN POSITIVA FUERTE", "+0.7 a +1.0",
+             "Las variables aumentan juntas", "#27AE60"),
+            ("CORRELACIÓN NEGATIVA FUERTE", "-1.0 a -0.7",
+             "Cuando una sube, la otra baja", "#E74C3C"),
+            ("CORRELACIÓN MODERADA", "±0.3 a ±0.7",
+             "Relación moderada entre variables", "#F39C12"),
+            ("CORRELACIÓN DÉBIL", "-0.3 a +0.3",
+             "Las variables actúan independientemente", "#95A5A6")
+        ]
+
+        y_pos = 0.65
+        for name, range_val, description, color in correlations_info:
+            # Título de la correlación
+            ax1.text(0.05, y_pos, name, fontsize=11, fontweight='bold', color=color)
+            ax1.text(0.55, y_pos, range_val, fontsize=10, color='#2C3E50')
+
+            # Descripción
+            ax1.text(0.05, y_pos - 0.08, description, fontsize=9, color='#34495E')
+
+            # Ejemplo agrícola
+            ax1.text(0.05, y_pos - 0.15, "Ejemplo agrícola:", fontsize=9, fontweight='bold', color='#2C3E50')
+
+            y_pos -= 0.25
+
+        ax1.set_xlim(0, 1)
+        ax1.set_ylim(0, 1)
+        ax1.axis('off')
+
+        # ==========================================
+        # GRÁFICO 2: MATRIZ DE CORRELACIÓN PROFESIONAL
+        # ==========================================
+        ax2 = plt.subplot(2, 2, 2)
+
+        # Seleccionar variables más importantes
+        important_vars = []
+        for col in correlation_matrix.columns:
+            if any(keyword in col.lower() for keyword in ['sup', 'prod', 'rend', 'camp']):
+                important_vars.append(col)
+
+        if len(important_vars) >= 2:
+            subset_corr = correlation_matrix.loc[important_vars, important_vars]
+            matrix_data = subset_corr
+            title = 'Variables Principales Agrícolas'
+        else:
+            matrix_data = correlation_matrix
+            title = 'Todas las Variables'
+
+        # Crear heatmap más profesional
+        mask = np.triu(np.ones_like(matrix_data, dtype=bool))
+        sns.heatmap(matrix_data, mask=mask, annot=True, cmap='RdYlBu_r', fmt='.2f',
+                   square=True, ax=ax2, cbar_kws={'shrink': 0.8, 'aspect': 20},
+                   annot_kws={'fontsize': 10, 'fontweight': 'bold'},
+                   linewidths=0.5, linecolor='white')
+
+        ax2.set_title(f'MATRIZ DE CORRELACIÓN\n{title}', fontsize=14, fontweight='bold', pad=20, color='#2C3E50')
+        ax2.tick_params(axis='x', rotation=45, labelsize=9)
+        ax2.tick_params(axis='y', labelsize=9)
+
+        # ==========================================
+        # GRÁFICO 3: TOP RELACIONES MÁS IMPORTANTES
+        # ==========================================
+        ax3 = plt.subplot(2, 2, 3)
+        ax3.set_facecolor('#F8F9FA')
+
+        all_correlations = []
+        for i in range(len(correlation_matrix.columns)):
+            for j in range(i+1, len(correlation_matrix.columns)):
+                corr_val = correlation_matrix.iloc[i, j]
+                var1 = correlation_matrix.columns[i]
+                var2 = correlation_matrix.columns[j]
+                all_correlations.append((var1, var2, corr_val))
+
+        # Ordenar por valor absoluto
+        all_correlations.sort(key=lambda x: abs(x[2]), reverse=True)
+        top_5 = all_correlations[:5]
+
+        if top_5:
+            # Crear etiquetas limpias
+            labels = []
+            for pair in top_5:
+                var1_clean = pair[0].replace('_', ' ').title()
+                var2_clean = pair[1].replace('_', ' ').title()
+                labels.append(f"{var1_clean}\nvs\n{var2_clean}")
+
+            values = [pair[2] for pair in top_5]
+
+            # Colores profesionales
+            colors = ['#27AE60' if v > 0.3 else '#E74C3C' if v < -0.3 else '#F39C12' for v in values]
+
+            bars = ax3.bar(range(len(labels)), values, color=colors, alpha=0.8,
+                          edgecolor='white', linewidth=1)
+
+            ax3.set_xticks(range(len(labels)))
+            ax3.set_xticklabels(labels, rotation=0, ha='center', fontsize=8, fontweight='bold')
+            ax3.set_ylabel('Coeficiente de Correlación', fontsize=11, color='#2C3E50')
+            ax3.set_title('RELACIONES MÁS IMPORTANTES', fontsize=14, fontweight='bold', pad=20, color='#2C3E50')
+            ax3.grid(True, alpha=0.3, axis='y', color='white')
+            ax3.axhline(y=0, color='#2C3E50', linestyle='-', alpha=0.5, linewidth=1.5)
+            ax3.set_ylim(-1.1, 1.1)
+            ax3.tick_params(colors='#2C3E50')
+
+            # Agregar valores en barras
+            for bar, val in zip(bars, values):
+                height = bar.get_height()
+                va = 'bottom' if height >= 0 else 'top'
+                offset = 0.05 if height >= 0 else -0.05
+                ax3.text(bar.get_x() + bar.get_width()/2,
+                        height + offset,
+                        f'{val:.2f}',
+                        ha='center', va=va,
+                        fontweight='bold', fontsize=10, color='white',
+                        bbox=dict(boxstyle='round,pad=0.2', facecolor=colors[bars.index(bar)], alpha=0.8))
+
+        # ==========================================
+        # GRÁFICO 4: RECOMENDACIONES PROFESIONALES
+        # ==========================================
+        ax4 = plt.subplot(2, 2, 4)
+        ax4.set_facecolor('#F8F9FA')
+        ax4.spines['top'].set_visible(False)
+        ax4.spines['right'].set_visible(False)
+        ax4.spines['left'].set_visible(False)
+        ax4.spines['bottom'].set_visible(False)
+
+        ax4.text(0.5, 0.95, 'RECOMENDACIONES ESTRATÉGICAS',
+                ha='center', va='top', fontsize=16, fontweight='bold', color='#2C3E50')
+
+        # Analizar correlaciones para recomendaciones
+        recommendations = []
+        for var1, var2, corr in all_correlations[:10]:  # Top 10 correlaciones
+            if abs(corr) > 0.5:
+                var1_clean = var1.replace('_', ' ').title()
+                var2_clean = var2.replace('_', ' ').title()
+                strength = "fuerte" if abs(corr) > 0.7 else "moderada"
+                direction = "positiva" if corr > 0 else "negativa"
+                recommendations.append(f"• {var1_clean} ↔ {var2_clean}: {strength} {direction} ({corr:.2f})")
+
+        # Agregar recomendaciones generales
+        recommendations.extend([
+            "",
+            "ACCIONES RECOMENDADAS:",
+            "• Variables con correlación positiva > 0.7: Ideales para predicción",
+            "• Variables con correlación negativa: Considerar trade-offs",
+            "• Variables independientes (< 0.3): Útiles para diversificar riesgos",
+            "",
+            "PRÓXIMOS PASOS:",
+            "• Usar variables altamente correlacionadas para modelos predictivos",
+            "• Investigar causas de correlaciones negativas inesperadas",
+            "• Considerar variables independientes para estrategias de diversificación"
+        ])
+
+        y_position = 0.85
+        for rec in recommendations:
+            if rec.startswith("•") or rec.startswith("ACCIONES") or rec.startswith("PRÓXIMOS"):
+                color = '#2C3E50' if rec.startswith("•") else '#E74C3C'
+                fontweight = 'bold' if not rec.startswith("•") else 'normal'
+                ax4.text(0.05, y_position, rec, fontsize=9, color=color, fontweight=fontweight)
+            else:
+                ax4.text(0.05, y_position, rec, fontsize=9, color='#34495E')
+            y_position -= 0.06
+
+        ax4.set_xlim(0, 1)
+        ax4.set_ylim(0, 1)
+        ax4.axis('off')
+
+        plt.tight_layout()
+        plt.subplots_adjust(top=0.85, hspace=0.3, wspace=0.3)
+
+        correlacion_file = OUTPUT_DIR / "correlacion_profesional.png"
+        plt.savefig(correlacion_file, dpi=300, bbox_inches='tight',
+                   facecolor='white', edgecolor='none')
         plt.show()
-        logging.info(f"Matriz de correlación guardada en {correlacion_file}")
+        logging.info(f"Análisis profesional de correlación guardado en {correlacion_file}")
+
+        # Crear explicación profesional
+        total_vars = len(correlation_matrix.columns)
+        strong_correlations = sum(1 for _, _, corr in all_correlations if abs(corr) > 0.7)
+        moderate_correlations = sum(1 for _, _, corr in all_correlations if 0.3 <= abs(corr) <= 0.7)
 
         explanation = (
-            "📊 ANÁLISIS DE CORRELACIÓN\n\n"
-            "Esta gráfica muestra cómo se relacionan las variables numéricas entre sí.\n\n"
-            "🔍 ¿QUÉ VER?\n"
-            "   • Números cercanos a 1 o -1: variables muy relacionadas\n"
-            "   • Números cercanos a 0: variables poco relacionadas\n\n"
-            "💡 ¿PARA QUÉ SIRVE?\n"
-            "   • Saber qué variables van juntas (ej: más siembra = más producción)\n"
-            "   • Ayudar a predecir una variable usando otra\n"
-            "   • Entender mejor tus datos agrícolas"
+            "ANÁLISIS DE CORRELACIÓN PROFESIONAL\n\n"
+            f"Variables analizadas: {total_vars}\n"
+            f"Correlaciones fuertes (> 0.7): {strong_correlations}\n"
+            f"Correlaciones moderadas (0.3-0.7): {moderate_correlations}\n\n"
+            "INTERPRETACIÓN:\n"
+            "• Correlaciones positivas: Las variables se mueven en la misma dirección\n"
+            "• Correlaciones negativas: Las variables se mueven en direcciones opuestas\n"
+            "• Valores cercanos a 0: Variables independientes\n\n"
+            "VALOR PRÁCTICO:\n"
+            "• Identificar variables predictoras para modelos de IA\n"
+            "• Descubrir relaciones causales en la producción agrícola\n"
+            "• Optimizar estrategias de siembra y cosecha\n\n"
+            "RECOMENDACIONES:\n"
+            "• Usar variables con correlación > 0.7 para predicciones confiables\n"
+            "• Investigar correlaciones negativas para entender limitaciones\n"
+            "• Aprovechar variables independientes para diversificar riesgos"
         )
-        messagebox.showinfo("Análisis de Correlación", f"Matriz de correlación guardada en {correlacion_file}\n\n{explanation}")
+
+        messagebox.showinfo("Análisis Profesional de Correlación",
+                           f"Análisis completado y guardado en {correlacion_file}\n\n{explanation}")
 
     def correlacion_sup_sembrada_cosechada(self):
         """
@@ -1540,8 +1966,9 @@ class DataAnalyzer:
         """Geocodifica direcciones con barra de progreso moderna y guarda las coordenadas en el DataFrame."""
         if not self._check_csv_loaded():
             return
+        # Los nombres de columnas ya están normalizados a minúsculas en cargar_csv()
         if 'departamento' not in self.df.columns or 'provincia' not in self.df.columns or 'pais' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'departamento', 'provincia' y 'pais'.")
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'departamento', 'provincia' y 'pais' (pueden estar en mayúsculas o con acentos).")
             return
 
         def geocode_with_retry(address, max_retries=3):
@@ -1709,7 +2136,7 @@ class DataAnalyzer:
             if pd.notna(row['Latitude']) and pd.notna(row['Longitude']):
                 folium.Marker(
                     location=[row['Latitude'], row['Longitude']],
-                    popup=f"{row['GeocodedAddress']} - Cultivo: {row['cultivo']}",
+                    popup=f"Provincia: {row['provincia']}, Departamento: {row['departamento']}, Cultivo: {row['cultivo']}",
                 ).add_to(mapa)
 
         mapa_file = OUTPUT_DIR / "mapa_geoespacial.html"
@@ -1723,13 +2150,89 @@ class DataAnalyzer:
             "Este análisis crea un mapa interactivo con puntos en las ubicaciones de tus datos.\n\n"
             "🔍 ¿QUÉ VERÁS?\n"
             "   • Puntos en el mapa = ubicaciones de tus datos\n"
-            "   • Al hacer clic en un punto = información del lugar\n\n"
+            "   • Al hacer clic en un punto = Provincia, Departamento y Cultivo\n\n"
             "💡 ¿PARA QUÉ SIRVE?\n"
             "   • Ver dónde se produce más agricultura\n"
             "   • Identificar patrones geográficos\n"
             "   • Planificar distribución de recursos"
         )
         messagebox.showinfo("Generar Mapa", f"Mapa generado exitosamente.\n\n{explanation}")
+
+    def mapa_distribucion_cultivos(self):
+        """Genera un mapa del mundo mostrando la distribución de cultivos con colores diferenciados."""
+        if not self._check_csv_loaded():
+            return
+        if 'Latitude' not in self.df.columns or 'Longitude' not in self.df.columns or 'cultivo' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, geocodifique las direcciones primero y asegúrese de tener la columna 'cultivo'.")
+            return
+
+        # Filtrar datos con coordenadas válidas
+        df_mapa = self.df.dropna(subset=['Latitude', 'Longitude', 'cultivo'])
+
+        if df_mapa.empty:
+            messagebox.showwarning("Advertencia", "No hay datos válidos con coordenadas y cultivos para mostrar en el mapa.")
+            return
+
+        # Crear mapa centrado en el mundo
+        mapa = folium.Map(location=[0, 0], zoom_start=2)
+
+        # Obtener cultivos únicos y asignar colores
+        cultivos_unicos = df_mapa['cultivo'].unique()
+        colores = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'lightred', 'beige', 'darkblue', 'darkgreen',
+                   'cadetblue', 'darkpurple', 'white', 'pink', 'lightblue', 'lightgreen', 'gray', 'black', 'lightgray']
+
+        color_dict = {}
+        for i, cultivo in enumerate(cultivos_unicos):
+            color_dict[cultivo] = colores[i % len(colores)]
+
+        # Agregar marcadores para cada punto de datos
+        for _, row in df_mapa.iterrows():
+            cultivo = row['cultivo']
+            color = color_dict[cultivo]
+            folium.CircleMarker(
+                location=[row['Latitude'], row['Longitude']],
+                radius=5,
+                popup=f"Cultivo: {cultivo}<br>Provincia: {row.get('provincia', 'N/A')}<br>Departamento: {row.get('departamento', 'N/A')}",
+                color=color,
+                fill=True,
+                fill_color=color,
+                fill_opacity=0.7
+            ).add_to(mapa)
+
+        # Agregar leyenda
+        legend_html = '''
+        <div style="position: fixed;
+                    bottom: 50px; left: 50px; width: 200px; height: auto;
+                    background-color: white; border:2px solid grey; z-index:9999; font-size:14px;
+                    padding: 10px">
+        <p><b>Leyenda de Cultivos</b></p>
+        '''
+        for cultivo, color in color_dict.items():
+            legend_html += f'<p><span style="color:{color};">&#9679;</span> {cultivo}</p>'
+        legend_html += '</div>'
+
+        mapa.get_root().html.add_child(folium.Element(legend_html))
+
+        mapa_file = OUTPUT_DIR / "mapa_distribucion_cultivos.html"
+        mapa.save(mapa_file)
+        logging.info(f"Mapa de distribución de cultivos guardado en {mapa_file}")
+
+        webbrowser.open(mapa_file.resolve().as_uri())
+
+        explanation = (
+            "🌍 MAPA DE DISTRIBUCIÓN DE CULTIVOS\n\n"
+            "Este mapa muestra la distribución mundial de tus cultivos agrícolas, "
+            "con cada tipo de cultivo representado por un color diferente.\n\n"
+            "🔍 ¿QUÉ VERÁS?\n"
+            "   • Puntos coloreados = ubicaciones de cultivos\n"
+            "   • Cada color representa un tipo de cultivo diferente\n"
+            "   • Leyenda en la esquina inferior izquierda\n\n"
+            "💡 ¿PARA QUÉ SIRVE?\n"
+            "   • Ver dónde se cultivan diferentes productos\n"
+            "   • Identificar patrones globales de agricultura\n"
+            "   • Analizar diversidad agrícola por región"
+        )
+        messagebox.showinfo("Mapa de Distribución de Cultivos", f"Mapa generado exitosamente.\n\n{explanation}")
 
     def produccion_top_cultivos(self):
         """Genera un gráfico de líneas para los 4 principales cultivos por producción total."""
