@@ -582,6 +582,57 @@ class DataAnalyzer:
         plt.tight_layout()
         plt.show()
 
+        # Análisis adicional de tendencias temporales
+        años_analizados = len(summary_by_campaign)
+        año_inicial = summary_by_campaign['campana'].min()
+        año_final = summary_by_campaign['campana'].max()
+
+        # Calcular tendencias para cada variable
+        tendencias = {}
+        for columna in ['sup_sembrada', 'sup_cosechada', 'produccion', 'rendimiento']:
+            if len(summary_by_campaign) > 1:
+                valor_inicial = summary_by_campaign[columna].iloc[0]
+                valor_final = summary_by_campaign[columna].iloc[-1]
+                if valor_inicial > 0:
+                    cambio_porcentual = ((valor_final - valor_inicial) / valor_inicial) * 100
+                    tendencias[columna] = cambio_porcentual
+                else:
+                    tendencias[columna] = 0
+
+        # Identificar años con valores extremos
+        max_produccion_año = summary_by_campaign.loc[summary_by_campaign['produccion'].idxmax(), 'campana']
+        min_produccion_año = summary_by_campaign.loc[summary_by_campaign['produccion'].idxmin(), 'campana']
+
+        # Calcular eficiencia (relación entre superficie cosechada y sembrada)
+        summary_by_campaign['eficiencia_cosecha'] = (summary_by_campaign['sup_cosechada'] / summary_by_campaign['sup_sembrada']) * 100
+        eficiencia_promedio = summary_by_campaign['eficiencia_cosecha'].mean()
+
+        explanation = (
+            f"📈 ANÁLISIS TEMPORAL DE PRODUCCIÓN AGRÍCOLA\n\n"
+            f"📅 Período analizado: {año_inicial} - {año_final} ({años_analizados} campañas)\n\n"
+            f"📊 TENDENCIAS OBSERVADAS:\n"
+            f"   • Superficie sembrada: {tendencias.get('sup_sembrada', 0):+.1f}% cambio total\n"
+            f"   • Superficie cosechada: {tendencias.get('sup_cosechada', 0):+.1f}% cambio total\n"
+            f"   • Producción total: {tendencias.get('produccion', 0):+.1f}% cambio total\n"
+            f"   • Rendimiento promedio: {tendencias.get('rendimiento', 0):+.1f}% cambio total\n\n"
+            f"🏆 AÑOS DESTACADOS:\n"
+            f"   • Mayor producción: Campaña {max_produccion_año}\n"
+            f"   • Menor producción: Campaña {min_produccion_año}\n\n"
+            f"⚡ EFICIENCIA AGRÍCOLA:\n"
+            f"   • Eficiencia promedio de cosecha: {eficiencia_promedio:.1f}%\n"
+            f"     ↳ Porcentaje de superficie sembrada que se cosecha exitosamente\n\n"
+            f"💡 INSIGHTS CLAVE:\n"
+            f"   • {'Tendencia positiva' if tendencias.get('produccion', 0) > 5 else 'Tendencia negativa' if tendencias.get('produccion', 0) < -5 else 'Producción estable'} en producción total\n"
+            f"   • {'Mejora' if tendencias.get('rendimiento', 0) > 0 else 'Declive'} en eficiencia productiva\n"
+            f"   • Eficiencia de cosecha {'alta (>85%)' if eficiencia_promedio > 85 else 'media (70-85%)' if eficiencia_promedio > 70 else 'baja (<70%)'}\n\n"
+            f"📋 RECOMENDACIONES:\n"
+            f"   • Analizar causas de variaciones extremas en años de {max_produccion_año} y {min_produccion_año}\n"
+            f"   • {'Mejorar' if eficiencia_promedio < 80 else 'Mantener'} prácticas de cosecha\n"
+            f"   • Monitorear tendencias de rendimiento para optimizar cultivos"
+        )
+
+        messagebox.showinfo("Análisis Temporal", explanation)
+
     def analisis_correlacion(self):
         """Genera análisis de correlación con diseño profesional y limpio."""
         if not self._check_csv_loaded():
@@ -1243,7 +1294,7 @@ class DataAnalyzer:
         messagebox.showinfo("Tendencias de Producción por Cultivo", f"Gráfica guardada en {tendencias_file}\n\n{explanation}")
 
     def modelos_predictivos(self):
-        """Entrena y evalúa un modelo de regresión lineal."""
+        """Entrena y evalúa un modelo de regresión lineal con visualizaciones completas."""
         if not self._check_csv_loaded():
             return
         if 'sup_sembrada' not in self.df.columns or 'produccion' not in self.df.columns:
@@ -1251,10 +1302,14 @@ class DataAnalyzer:
             return
 
         # Limpiar datos eliminando filas con NaN en las columnas relevantes
-        self.df = self.df.dropna(subset=['sup_sembrada', 'produccion'])
+        df_clean = self.df.dropna(subset=['sup_sembrada', 'produccion']).copy()
 
-        X = self.df[['sup_sembrada']].values
-        y = self.df['produccion'].values
+        if len(df_clean) < 10:
+            messagebox.showwarning("Advertencia", "Se necesitan al menos 10 registros válidos para el análisis predictivo.")
+            return
+
+        X = df_clean[['sup_sembrada']].values
+        y = df_clean['produccion'].values
 
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
 
@@ -1264,20 +1319,138 @@ class DataAnalyzer:
 
         mse = mean_squared_error(y_test, y_pred)
         r2 = r2_score(y_test, y_pred)
+        rmse = np.sqrt(mse)
+
+        # Crear visualizaciones completas
+        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+
+        # Gráfico 1: Datos de entrenamiento y línea de regresión
+        ax1.scatter(X_train, y_train, alpha=0.6, color='blue', label='Datos de entrenamiento', s=50)
+        ax1.scatter(X_test, y_test, alpha=0.8, color='red', label='Datos de prueba', s=50)
+
+        # Línea de regresión
+        X_plot = np.linspace(X.min(), X.max(), 100).reshape(-1, 1)
+        y_plot = model.predict(X_plot)
+        ax1.plot(X_plot, y_plot, 'g-', linewidth=3, label=f'Línea de regresión\ny = {model.coef_[0]:.2f}x + {model.intercept_:.2f}')
+
+        ax1.set_xlabel('Superficie Sembrada (hectáreas)')
+        ax1.set_ylabel('Producción (toneladas)')
+        ax1.set_title('Modelo de Regresión Lineal: Superficie vs Producción')
+        ax1.legend()
+        ax1.grid(True, alpha=0.3)
+
+        # Gráfico 2: Predicciones vs Valores Reales
+        ax2.scatter(y_test, y_pred, alpha=0.7, color='green', s=60, edgecolors='black')
+
+        # Línea ideal (predicción perfecta)
+        min_val = min(y_test.min(), y_pred.min())
+        max_val = max(y_test.max(), y_pred.max())
+        ax2.plot([min_val, max_val], [min_val, max_val], 'r--', linewidth=2, label='Línea ideal (predicción perfecta)')
+
+        # Línea de tendencia de las predicciones
+        z = np.polyfit(y_test, y_pred, 1)
+        p = np.poly1d(z)
+        ax2.plot(y_test, p(y_test), "b--", alpha=0.8, linewidth=2, label='Tendencia de predicciones')
+
+        ax2.set_xlabel('Producción Real (toneladas)')
+        ax2.set_ylabel('Producción Predicha (toneladas)')
+        ax2.set_title('Predicciones vs Valores Reales')
+        ax2.legend()
+        ax2.grid(True, alpha=0.3)
+
+        # Gráfico 3: Distribución de errores (residuales)
+        errores = y_test - y_pred
+        ax3.hist(errores, bins=20, alpha=0.7, color='purple', edgecolor='black')
+        ax3.axvline(0, color='red', linestyle='--', linewidth=2, label='Sin error')
+        ax3.axvline(errores.mean(), color='blue', linestyle='-', linewidth=2, label=f'Error promedio ({errores.mean():.1f})')
+
+        ax3.set_xlabel('Error de Predicción (toneladas)')
+        ax3.set_ylabel('Frecuencia')
+        ax3.set_title('Distribución de Errores del Modelo')
+        ax3.legend()
+        ax3.grid(True, alpha=0.3)
+
+        # Estadísticas de errores
+        error_mean = np.mean(errores)
+        error_std = np.std(errores)
+        ax3.text(0.02, 0.98, f'Error promedio: {error_mean:.1f} ton\nDesviación: {error_std:.1f} ton',
+                transform=ax3.transAxes, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+
+        # Gráfico 4: Métricas de rendimiento del modelo
+        metricas = ['R²', 'MSE', 'RMSE', 'MAE']
+        valores = [r2, mse, rmse, np.mean(np.abs(errores))]
+
+        colores_metricas = ['green' if r2 > 0.7 else 'orange' if r2 > 0.5 else 'red',
+                           'red' if mse > np.var(y) else 'orange',
+                           'red' if rmse > np.std(y) else 'orange',
+                           'red' if np.mean(np.abs(errores)) > np.std(y) else 'orange']
+
+        bars = ax4.bar(metricas, valores, color=colores_metricas, alpha=0.8, edgecolor='black')
+
+        # Agregar valores en las barras
+        for bar, val in zip(bars, valores):
+            ax4.text(bar.get_x() + bar.get_width()/2, bar.get_height() + val*0.01,
+                    f'{val:.3f}', ha='center', va='bottom', fontweight='bold', fontsize=10)
+
+        ax4.set_ylabel('Valor de la Métrica')
+        ax4.set_title('Métricas de Rendimiento del Modelo')
+        ax4.grid(True, alpha=0.3, axis='y')
+
+        # Agregar líneas de referencia
+        ax4.axhline(y=0.8, color='green', linestyle='--', alpha=0.7, label='R² bueno (>0.8)')
+        ax4.axhline(y=np.var(y), color='red', linestyle='--', alpha=0.7, label='MSE referencia (varianza total)')
+        ax4.legend(fontsize=8)
+
+        plt.suptitle("modelos_predictivos", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+        plt.tight_layout()
+
+        # Guardar gráfico
+        output_file = OUTPUT_DIR / "modelo_predictivo_completo.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.show()
+
+        # Análisis adicional del modelo
+        pendiente = model.coef_[0]
+        intercepto = model.intercept_
+
+        # Calcular predicciones para valores extremos
+        sup_min = df_clean['sup_sembrada'].min()
+        sup_max = df_clean['sup_sembrada'].max()
+        prod_pred_min = model.predict([[sup_min]])[0]
+        prod_pred_max = model.predict([[sup_max]])[0]
 
         explanation = (
-            f"📈 MODELO PREDICTIVO SIMPLE\n\n"
-            f"Este análisis usa un modelo matemático simple para predecir la producción agrícola "
-            f"basándose en la superficie sembrada.\n\n"
-            f"🔍 RESULTADOS:\n"
-            f"   • Error promedio del modelo: {mse:.0f} (más bajo es mejor)\n"
-            f"   • Precisión del modelo: {r2:.2f} (más cerca de 1 es mejor)\n\n"
-            f"💡 ¿QUÉ SIGNIFICA?\n"
-            f"   • Si el error es bajo y la precisión alta, el modelo predice bien\n"
-            f"   • Si no, puede que necesites más datos o variables diferentes\n\n"
-            f"📋 USO: Ayuda a estimar producción futura basada en superficie sembrada"
+            f"📈 MODELO PREDICTIVO DE REGRESIÓN LINEAL COMPLETO\n\n"
+            f"Este análisis crea un modelo matemático que predice la producción agrícola "
+            f"basándose únicamente en la superficie sembrada.\n\n"
+            f"🔢 ECUACIÓN DEL MODELO:\n"
+            f"   Producción = {pendiente:.2f} × Superficie_Sembrada + {intercepto:.2f}\n\n"
+            f"📊 MÉTRICAS DE RENDIMIENTO:\n"
+            f"   • R² (precisión): {r2:.3f} - {'Excelente (>0.8)' if r2 > 0.8 else 'Buena (0.6-0.8)' if r2 > 0.6 else 'Aceptable (0.3-0.6)' if r2 > 0.3 else 'Pobre (<0.3)'}\n"
+            f"   • MSE (error cuadrático medio): {mse:.0f} toneladas²\n"
+            f"   • RMSE (error típico): {rmse:.0f} toneladas\n"
+            f"   • MAE (error absoluto medio): {np.mean(np.abs(errores)):.0f} toneladas\n\n"
+            f"📈 PREDICCIONES EXTREMAS:\n"
+            f"   • Con {sup_min:,.0f} ha sembradas → {prod_pred_min:,.0f} ton predichas\n"
+            f"   • Con {sup_max:,.0f} ha sembradas → {prod_pred_max:,.0f} ton predichas\n\n"
+            f"💡 INTERPRETACIÓN DE GRÁFICOS:\n"
+            f"   • Gráfico 1: Muestra cómo se ajusta la línea de regresión a los datos\n"
+            f"   • Gráfico 2: Compara predicciones vs realidad (puntos cerca de línea roja = buenas predicciones)\n"
+            f"   • Gráfico 3: Distribución de errores (curva centrada en cero = buen modelo)\n"
+            f"   • Gráfico 4: Métricas cuantitativas del rendimiento\n\n"
+            f"⚠️ LIMITACIONES:\n"
+            f"   • Solo usa una variable predictora (superficie sembrada)\n"
+            f"   • No considera factores como clima, suelo, variedad de cultivo\n"
+            f"   • Es un modelo lineal simple (relaciones complejas pueden no capturarse)\n\n"
+            f"📋 RECOMENDACIONES:\n"
+            f"   • {'El modelo es confiable' if r2 > 0.7 else 'Considerar más variables o modelos complejos' if r2 > 0.5 else 'Revisar datos o cambiar enfoque'}\n"
+            f"   • Usar para estimaciones rápidas de producción\n"
+            f"   • Combinar con otros factores para predicciones más precisas\n\n"
+            f"📊 Gráfico guardado en: {output_file}"
         )
-        messagebox.showinfo("Modelo Predictivo", explanation)
+
+        messagebox.showinfo("Modelo Predictivo Completo", explanation)
 
     def clasificacion_cultivos(self):
         """Analiza y clasifica cultivos según características de producción."""
