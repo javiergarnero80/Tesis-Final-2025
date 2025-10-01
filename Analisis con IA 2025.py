@@ -242,15 +242,12 @@ def sumar_columnas(df, cols):
             carpeta = input("La ruta no puede estar vacía. Ingrese la carpeta destino: ").strip()
         destino = Path(carpeta).expanduser()
         destino.mkdir(parents=True, exist_ok=True)
-        for nombre, figura in figures:
-            figura.savefig(destino / nombre, dpi=300, bbox_inches='tight')
-        print(f"Gráficos guardados en {destino}")
+        fig.savefig(destino / "analisis_estadistico_integral.png", dpi=300, bbox_inches='tight')
     else:
         print("Los gráficos no se guardaron.")
 
     # Cerrar las figuras para liberar memoria en sesiones iterativas.
-    for _, figura in figures:
-        plt.close(figura)
+    plt.close(fig)
 
 
 # Geolocalizador con configuración mejorada
@@ -355,7 +352,7 @@ class DataAnalyzer:
         self.analisis_menu.add_command(label="Análisis de Riesgos", command=self.analisis_riesgos)
         self.analisis_menu.add_command(label="Correlación Sup. Sembrada-Sup. Cosechada", command=self.correlacion_sup_sembrada_cosechada)
         self.analisis_menu.add_command(label="Producción Total por Provincia", command=self.produccion_total_por_provincia)
-        self.analisis_menu.add_command(label="Evolución de Cultivos por Campaña", command=self.evolucion_cultivos_por_campaña)
+        self.analisis_menu.add_command(label="Evolución de Cultivos por Campaña", command=self.evolucion_cultivos_por_campana)
         self.analisis_menu.add_command(label="Tendencias de Producción por Cultivo", command=self.tendencias_produccion_por_cultivo)
         self.analisis_menu.add_command(label="Predicción de Tendencias con IA", command=self.prediccion_tendencias_ia)
         self.analisis_menu.add_command(label="Análisis Predictivo con Red Neuronal", command=self.analisis_predictivo_nn)
@@ -376,8 +373,9 @@ class DataAnalyzer:
         if not self._check_csv_loaded():
             return
 
-        # Obtener columnas numéricas
-        numeric_cols = self.df.select_dtypes(include=[float, int]).columns.tolist()
+        # Obtener columnas numéricas, excluyendo coordenadas geocodificadas
+        numeric_cols = [col for col in self.df.select_dtypes(include=[float, int]).columns
+                       if col not in ['Latitude', 'Longitude']]
 
         if not numeric_cols:
             messagebox.showwarning("Advertencia", "No se encontraron columnas numéricas para analizar.")
@@ -537,8 +535,8 @@ class DataAnalyzer:
         """Genera un análisis temporal de la producción."""
         if not self._check_csv_loaded():
             return
-        if 'campaña' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El archivo CSV debe contener la columna 'campaña'.")
+        if 'campana' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El archivo CSV debe contener la columna 'campana'.")
             return
 
         if 'produccion' not in self.df.columns:
@@ -546,21 +544,21 @@ class DataAnalyzer:
             return
 
         # Integración del nuevo análisis temporal
-        self.df['campaña'] = self.df['campaña'].astype(str).str.split('/').str[0].astype(int)
-        summary_by_campaign = self.df.groupby('campaña').agg({
+        self.df['campana'] = self.df['campana'].astype(str).str.split('/').str[0].astype(int)
+        summary_by_campaign = self.df.groupby('campana').agg({
             'sup_sembrada': 'sum',
             'sup_cosechada': 'sum',
             'produccion': 'sum',
             'rendimiento': 'mean'
         }).reset_index()
-        summary_by_campaign.sort_values(by='campaña', inplace=True)
+        summary_by_campaign.sort_values(by='campana', inplace=True)
 
         plt.figure(figsize=(14, 10))
 
         # Superficie Sembrada y Cosechada
         plt.subplot(2, 2, 1)
-        plt.plot(summary_by_campaign['campaña'], summary_by_campaign['sup_sembrada'], label='Superficie Sembrada')
-        plt.plot(summary_by_campaign['campaña'], summary_by_campaign['sup_cosechada'], label='Superficie Cosechada')
+        plt.plot(summary_by_campaign['campana'], summary_by_campaign['sup_sembrada'], label='Superficie Sembrada')
+        plt.plot(summary_by_campaign['campana'], summary_by_campaign['sup_cosechada'], label='Superficie Cosechada')
         plt.title('Evolución de la Superficie Sembrada y Cosechada')
         plt.xlabel('Año de Campaña')
         plt.ylabel('Superficie (hectáreas)')
@@ -568,14 +566,14 @@ class DataAnalyzer:
 
         # Producción
         plt.subplot(2, 2, 2)
-        plt.plot(summary_by_campaign['campaña'], summary_by_campaign['produccion'], label='Producción', color='green')
+        plt.plot(summary_by_campaign['campana'], summary_by_campaign['produccion'], label='Producción', color='green')
         plt.title('Evolución de la Producción')
         plt.xlabel('Año de Campaña')
         plt.ylabel('Producción (toneladas)')
 
         # Rendimiento
         plt.subplot(2, 2, 3)
-        plt.plot(summary_by_campaign['campaña'], summary_by_campaign['rendimiento'], label='Rendimiento', color='orange')
+        plt.plot(summary_by_campaign['campana'], summary_by_campaign['rendimiento'], label='Rendimiento', color='orange')
         plt.title('Evolución del Rendimiento Promedio')
         plt.xlabel('Año de Campaña')
         plt.ylabel('Rendimiento (kg/ha)')
@@ -909,44 +907,44 @@ class DataAnalyzer:
         """Genera una gráfica de la producción total por provincia."""
         if not self._check_csv_loaded():
             return
-        if 'provincia' not in self.df.columns or 'produccion' not in self.df.columns or 'campaña' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'provincia', 'produccion' y 'campaña'.")
+        if 'provincia' not in self.df.columns or 'produccion' not in self.df.columns or 'campana' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'provincia', 'produccion' y 'campana'.")
             return
 
-        # Convertir la columna campaña a string para evitar errores
-        self.df['campaña'] = self.df['campaña'].astype(str)
+        # Convertir la columna campana a string para evitar errores
+        self.df['campana'] = self.df['campana'].astype(str)
         
-        campañas = self.df['campaña'].unique()
-        if len(campañas) == 0:
-            messagebox.showwarning("Advertencia", "No se encontraron campañas en el archivo CSV.")
+        campanas = self.df['campana'].unique()
+        if len(campanas) == 0:
+            messagebox.showwarning("Advertencia", "No se encontraron campanas en el archivo CSV.")
             return
 
-        campañas_limpias = [str(campaña).strip() for campaña in campañas if pd.notna(campaña)]
+        campanas_limpias = [str(campana).strip() for campana in campanas if pd.notna(campana)]
 
-        selected_campaña = self.ask_option("Seleccionar Campaña", "Seleccione la campaña:", campañas_limpias)
-        if not selected_campaña:
+        selected_campana = self.ask_option("Seleccionar Campaña", "Seleccione la campana:", campanas_limpias)
+        if not selected_campana:
             return
 
         # Filtrar usando comparación directa en lugar de .str.strip()
-        df_campaña = self.df[self.df['campaña'].astype(str).str.strip() == selected_campaña]
+        df_campana = self.df[self.df['campana'].astype(str).str.strip() == selected_campana]
         
-        if df_campaña.empty:
-            messagebox.showwarning("Advertencia", "No se encontraron datos para la campaña seleccionada.")
+        if df_campana.empty:
+            messagebox.showwarning("Advertencia", "No se encontraron datos para la campana seleccionada.")
             return
             
-        produccion_por_provincia = df_campaña.groupby('provincia')['produccion'].sum().sort_values(ascending=False)
+        produccion_por_provincia = df_campana.groupby('provincia')['produccion'].sum().sort_values(ascending=False)
 
         if produccion_por_provincia.empty:
-            messagebox.showwarning("Advertencia", "No se encontraron datos de producción para la campaña seleccionada.")
+            messagebox.showwarning("Advertencia", "No se encontraron datos de producción para la campana seleccionada.")
             return
 
-        title = f"Producción Total por Provincia - Campaña {selected_campaña}"
-        output_file = OUTPUT_DIR / f"produccion_por_provincia_{self.safe_file_name(selected_campaña)}.png"
+        title = f"Producción Total por Provincia - Campaña {selected_campana}"
+        output_file = OUTPUT_DIR / f"produccion_por_provincia_{self.safe_file_name(selected_campana)}.png"
         Visualization.plot_bar_chart(produccion_por_provincia, title, "Provincias", "Producción [Tn]", output_file, "produccion_total_por_provincia")
 
         explanation = (
             "📊 PRODUCCIÓN POR PROVINCIA\n\n"
-            "Esta gráfica muestra cuánto produce cada provincia en la campaña seleccionada.\n\n"
+            "Esta gráfica muestra cuánto produce cada provincia en la campana seleccionada.\n\n"
             "🔍 ¿QUÉ VER?\n"
             "   • Provincias con barras más altas = más producción\n"
             "   • Provincias con barras más bajas = menos producción\n\n"
@@ -957,12 +955,12 @@ class DataAnalyzer:
         )
         messagebox.showinfo("Producción Total por Provincia", f"Gráfica guardada en {output_file}\n\n{explanation}")
 
-    def evolucion_cultivos_por_campaña(self):
-        """Genera un gráfico de la evolución de los cultivos por campaña con nombres limpios y legibles."""
+    def evolucion_cultivos_por_campana(self):
+        """Genera un gráfico de la evolución de los cultivos por campana con nombres limpios y legibles."""
         if not self._check_csv_loaded():
             return
-        if 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campaña' y 'cultivo'.")
+        if 'campana' not in self.df.columns or 'cultivo' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campana' y 'cultivo'.")
             return
 
         # Limpiar nombres de cultivos sin normalizar (mantener nombres originales legibles)
@@ -976,23 +974,23 @@ class DataAnalyzer:
             messagebox.showwarning("Advertencia", f"El archivo CSV debe contener al menos una de las columnas: {', '.join(columnas_interes)}.")
             return
 
-        # Procesar fechas de campaña de manera más robusta
+        # Procesar fechas de campana de manera más robusta
         try:
             # Intentar diferentes formatos de fecha
-            if df_trabajo['campaña'].dtype == 'object':
+            if df_trabajo['campana'].dtype == 'object':
                 # Si es texto, intentar extraer el año
-                df_trabajo['año'] = df_trabajo['campaña'].astype(str).str.extract(r'(\d{4})').astype(float)
+                df_trabajo['año'] = df_trabajo['campana'].astype(str).str.extract(r'(\d{4})').astype(float)
             else:
                 # Si es numérico, usar directamente
-                df_trabajo['año'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+                df_trabajo['año'] = pd.to_numeric(df_trabajo['campana'], errors='coerce')
             
             # Filtrar años válidos
             df_trabajo = df_trabajo.dropna(subset=['año'])
             df_trabajo['año'] = df_trabajo['año'].astype(int)
             
         except Exception as e:
-            logging.error(f"Error procesando fechas de campaña: {e}")
-            messagebox.showerror("Error", "No se pudieron procesar las fechas de campaña correctamente.")
+            logging.error(f"Error procesando fechas de campana: {e}")
+            messagebox.showerror("Error", "No se pudieron procesar las fechas de campana correctamente.")
             return
 
         if df_trabajo.empty:
@@ -1017,12 +1015,9 @@ class DataAnalyzer:
             messagebox.showwarning("Advertencia", f"No se encontraron datos para el cultivo seleccionado: {cultivo_seleccionado}.")
             return
 
-        # Crear visualización mejorada
-        plt.figure(figsize=(14, 10))
-        
         # Agrupar por año y sumar valores
         datos_agrupados = df_filtrado.groupby('año')[columnas_presentes].sum()
-        
+
         if datos_agrupados.empty:
             messagebox.showwarning("Advertencia", "No hay datos suficientes para generar el gráfico.")
             return
@@ -1032,7 +1027,7 @@ class DataAnalyzer:
             fig, axes = plt.subplots(len(columnas_presentes), 1, figsize=(14, 4*len(columnas_presentes)))
             if len(columnas_presentes) == 1:
                 axes = [axes]
-            
+
             for i, columna in enumerate(columnas_presentes):
                 axes[i].plot(datos_agrupados.index, datos_agrupados[columna],
                            marker='o', linewidth=2, markersize=6, label=columna)
@@ -1041,13 +1036,14 @@ class DataAnalyzer:
                 axes[i].set_ylabel(columna.replace("_", " ").title())
                 axes[i].grid(True, alpha=0.3)
                 axes[i].legend()
-                
+
                 # Agregar valores en los puntos
                 for x, y in zip(datos_agrupados.index, datos_agrupados[columna]):
                     axes[i].annotate(f'{y:,.0f}', (x, y), textcoords="offset points",
                                    xytext=(0,10), ha='center', fontsize=8)
         else:
             # Un solo gráfico si hay una sola columna
+            plt.figure(figsize=(14, 10))
             columna = columnas_presentes[0]
             plt.plot(datos_agrupados.index, datos_agrupados[columna],
                     marker='o', linewidth=3, markersize=8, color='steelblue')
@@ -1055,13 +1051,13 @@ class DataAnalyzer:
             plt.xlabel('Año', fontsize=12)
             plt.ylabel(columna.replace("_", " ").title(), fontsize=12)
             plt.grid(True, alpha=0.3)
-            
+
             # Agregar valores en los puntos
             for x, y in zip(datos_agrupados.index, datos_agrupados[columna]):
                 plt.annotate(f'{y:,.0f}', (x, y), textcoords="offset points",
                            xytext=(0,10), ha='center', fontsize=10, fontweight='bold')
 
-        plt.suptitle("evolucion_cultivos_por_campaña", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+        plt.suptitle("evolucion_cultivos_por_campana", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
         plt.tight_layout()
 
         # Crear nombre de archivo seguro
@@ -1111,22 +1107,22 @@ class DataAnalyzer:
         messagebox.showinfo("Evolución de Cultivo por Campaña", f"Gráfica guardada en {evolucion_file}\n\n{explanation}")
 
     def tendencias_produccion_por_cultivo(self):
-        """Genera un gráfico de tendencias de producción por cultivo y campaña mejorado."""
+        """Genera un gráfico de tendencias de producción por cultivo y campana mejorado."""
         if not self._check_csv_loaded():
             return
-        if 'campaña' not in self.df.columns or 'cultivo' not in self.df.columns or 'produccion' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campaña', 'cultivo' y 'produccion'.")
+        if 'campana' not in self.df.columns or 'cultivo' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'campana', 'cultivo' y 'produccion'.")
             return
 
         # Filtrar datos válidos
-        df_valid = self.df.dropna(subset=['campaña', 'cultivo', 'produccion']).copy()
+        df_valid = self.df.dropna(subset=['campana', 'cultivo', 'produccion']).copy()
         
         if len(df_valid) < 10:
             messagebox.showwarning("Advertencia", "No hay suficientes datos válidos para el análisis de tendencias.")
             return
 
-        # Agrupar por cultivo y campaña, sumando la producción
-        df_grouped = df_valid.groupby(['cultivo', 'campaña'])['produccion'].sum().reset_index()
+        # Agrupar por cultivo y campana, sumando la producción
+        df_grouped = df_valid.groupby(['cultivo', 'campana'])['produccion'].sum().reset_index()
         
         # Obtener los cultivos con mayor producción total para evitar amontonamiento
         produccion_total_por_cultivo = df_grouped.groupby('cultivo')['produccion'].sum().sort_values(ascending=False)
@@ -1142,7 +1138,7 @@ class DataAnalyzer:
         top_4_cultivos = top_cultivos[:4]
         for cultivo in top_4_cultivos:
             cultivo_data = df_top[df_top['cultivo'] == cultivo]
-            ax1.plot(cultivo_data['campaña'], cultivo_data['produccion'],
+            ax1.plot(cultivo_data['campana'], cultivo_data['produccion'],
                     marker='o', linewidth=2, label=cultivo)
         
         ax1.set_title('Tendencias - Top 4 Cultivos por Producción')
@@ -1157,7 +1153,7 @@ class DataAnalyzer:
             next_4_cultivos = top_cultivos[4:8]
             for cultivo in next_4_cultivos:
                 cultivo_data = df_top[df_top['cultivo'] == cultivo]
-                ax2.plot(cultivo_data['campaña'], cultivo_data['produccion'],
+                ax2.plot(cultivo_data['campana'], cultivo_data['produccion'],
                         marker='s', linewidth=2, label=cultivo)
             
             ax2.set_title('Tendencias - Siguientes 4 Cultivos')
@@ -1187,7 +1183,7 @@ class DataAnalyzer:
                     f'{valor:,.0f}', ha='center', va='bottom', fontsize=8)
         
         # Gráfico 4: Evolución promedio de todos los cultivos
-        evolucion_promedio = df_grouped.groupby('campaña')['produccion'].mean()
+        evolucion_promedio = df_grouped.groupby('campana')['produccion'].mean()
         ax4.plot(evolucion_promedio.index, evolucion_promedio.values,
                 marker='o', linewidth=3, color='red', label='Promedio General')
         ax4.fill_between(evolucion_promedio.index, evolucion_promedio.values, alpha=0.3, color='red')
@@ -1408,10 +1404,10 @@ class DataAnalyzer:
         messagebox.showinfo("Clasificación de Cultivos", explanation)
 
     def analisis_riesgos(self):
-        """Realiza un análisis de riesgos agrícolas identificando zonas de alta, media y baja producción por provincia y campaña."""
+        """Realiza un análisis de riesgos agrícolas identificando zonas de alta, media y baja producción por provincia, cultivo o global."""
         columnas_requeridas = ['produccion']
-        columnas_opcionales = ['provincia', 'campaña', 'departamento']
-        
+        columnas_opcionales = ['provincia', 'campana', 'departamento', 'cultivo']
+
         # Verificar columnas requeridas
         if not self._check_csv_loaded():
             return
@@ -1419,11 +1415,45 @@ class DataAnalyzer:
             messagebox.showwarning("Advertencia", "El DataFrame debe contener la columna 'produccion'.")
             return
 
-        # Filtrar filas con datos válidos en 'produccion'
+        # Preguntar tipo de análisis
+        tipos_analisis = ["Análisis Global", "Por Provincia", "Por Cultivo"]
+        tipo_seleccionado = self.ask_option("Tipo de Análisis de Riesgos",
+                                          "Seleccione el tipo de análisis de riesgos:", tipos_analisis)
+        if not tipo_seleccionado:
+            return
+
+        # Filtrar datos según selección
         df_valid = self.df[self.df['produccion'].notna() & (self.df['produccion'] > 0)].copy()
 
+        if tipo_seleccionado == "Por Provincia":
+            if 'provincia' not in df_valid.columns:
+                messagebox.showwarning("Advertencia", "La columna 'provincia' no está disponible para análisis por provincia.")
+                return
+            provincias = sorted(df_valid['provincia'].dropna().unique())
+            provincia_seleccionada = self.ask_option("Seleccionar Provincia",
+                                                   "Seleccione la provincia para analizar:", provincias)
+            if not provincia_seleccionada:
+                return
+            df_valid = df_valid[df_valid['provincia'] == provincia_seleccionada]
+            titulo_base = f"Análisis de Riesgos - Provincia: {provincia_seleccionada}"
+
+        elif tipo_seleccionado == "Por Cultivo":
+            if 'cultivo' not in df_valid.columns:
+                messagebox.showwarning("Advertencia", "La columna 'cultivo' no está disponible para análisis por cultivo.")
+                return
+            cultivos = sorted(df_valid['cultivo'].dropna().unique())
+            cultivo_seleccionado = self.ask_option("Seleccionar Cultivo",
+                                                 "Seleccione el cultivo para analizar:", cultivos)
+            if not cultivo_seleccionado:
+                return
+            df_valid = df_valid[df_valid['cultivo'] == cultivo_seleccionado]
+            titulo_base = f"Análisis de Riesgos - Cultivo: {cultivo_seleccionado}"
+
+        else:  # Análisis Global
+            titulo_base = "Análisis de Riesgos - Global"
+
         if len(df_valid) < 10:
-            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos para realizar el análisis de riesgos.")
+            messagebox.showwarning("Advertencia", f"No hay suficientes datos válidos para realizar el análisis de riesgos ({len(df_valid)} registros, mínimo 10 requeridos).")
             return
 
         # Limitar a una muestra para evitar consumo excesivo de RAM
@@ -1432,14 +1462,14 @@ class DataAnalyzer:
             logging.info("Muestra limitada a 5000 filas para análisis de riesgos.")
 
         # Obtener información temporal si está disponible
-        campañas_info = ""
-        if 'campaña' in df_valid.columns:
-            campañas_unicas = sorted(df_valid['campaña'].dropna().unique())
-            if len(campañas_unicas) > 0:
-                primera_campaña = campañas_unicas[0]
-                ultima_campaña = campañas_unicas[-1]
-                total_campañas = len(campañas_unicas)
-                campañas_info = f"📅 Período analizado: {primera_campaña} - {ultima_campaña} ({total_campañas} campañas)\n"
+        campanas_info = ""
+        if 'campana' in df_valid.columns:
+            campanas_unicas = sorted(df_valid['campana'].dropna().unique())
+            if len(campanas_unicas) > 0:
+                primera_campana = campanas_unicas[0]
+                ultima_campana = campanas_unicas[-1]
+                total_campanas = len(campanas_unicas)
+                campanas_info = f"📅 Período analizado: {primera_campana} - {ultima_campana} ({total_campanas} campanas)\n"
 
         # Calcular estadísticas básicas de producción
         produccion_values = df_valid['produccion'].values
@@ -1467,37 +1497,38 @@ class DataAnalyzer:
         # Contar casos por nivel de riesgo
         conteo_riesgos = df_valid['Nivel_Riesgo'].value_counts()
 
-        # Análisis por provincia si está disponible
+        # Análisis por provincia (solo para análisis global)
         zonas_alto_riesgo = []
         zonas_medio_riesgo = []
         zonas_bajo_riesgo = []
-        
+
+        # Definir produccion_por_provincia si 'provincia' está disponible
         if 'provincia' in df_valid.columns:
-            # Agrupar por provincia y calcular producción promedio
             produccion_por_provincia = df_valid.groupby('provincia').agg({
                 'produccion': ['mean', 'count'],
                 'Nivel_Riesgo': lambda x: x.mode().iloc[0] if len(x.mode()) > 0 else 'Sin datos'
             }).round(2)
-            
+
             produccion_por_provincia.columns = ['Produccion_Promedio', 'Cantidad_Registros', 'Nivel_Riesgo_Predominante']
             produccion_por_provincia = produccion_por_provincia.reset_index()
-            
-            # Clasificar provincias por nivel de riesgo predominante
-            for _, row in produccion_por_provincia.iterrows():
-                provincia = row['provincia']
-                nivel = row['Nivel_Riesgo_Predominante']
-                prod_prom = row['Produccion_Promedio']
-                
-                if nivel == 'Alto Riesgo':
-                    zonas_alto_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
-                elif nivel == 'Riesgo Medio':
-                    zonas_medio_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
-                else:
-                    zonas_bajo_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+
+            if tipo_seleccionado == "Análisis Global":
+                # Clasificar provincias por nivel de riesgo predominante
+                for _, row in produccion_por_provincia.iterrows():
+                    provincia = row['provincia']
+                    nivel = row['Nivel_Riesgo_Predominante']
+                    prod_prom = row['Produccion_Promedio']
+
+                    if nivel == 'Alto Riesgo':
+                        zonas_alto_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+                    elif nivel == 'Riesgo Medio':
+                        zonas_medio_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+                    else:
+                        zonas_bajo_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
 
         # Crear visualización mejorada
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
-        
+
         # Gráfico 1: Histograma de producción con umbrales de riesgo
         ax1.hist(produccion_values, bins=30, alpha=0.7, color='skyblue', edgecolor='black')
         ax1.axvline(percentil_33, color='red', linestyle='--', linewidth=2, label=f'Alto Riesgo (≤{percentil_33:.0f})')
@@ -1552,26 +1583,34 @@ class DataAnalyzer:
                 autopct='%1.1f%%', startangle=90)
         ax4.set_title('Proporción de Niveles de Riesgo')
 
-        plt.suptitle("analisis_riesgos", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+        plt.suptitle(f"analisis_riesgos - {tipo_seleccionado.replace(' ', '_').lower()}", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
         plt.tight_layout()
-        
-        # Guardar gráfico
-        riesgo_file = OUTPUT_DIR / "analisis_riesgos_agricola.png"
+
+        # Crear nombre de archivo basado en el tipo de análisis
+        if tipo_seleccionado == "Análisis Global":
+            filename_suffix = "global"
+        elif tipo_seleccionado == "Por Provincia":
+            filename_suffix = f"provincia_{provincia_seleccionada.replace(' ', '_')}"
+        else:  # Por Cultivo
+            filename_suffix = f"cultivo_{cultivo_seleccionado.replace(' ', '_')}"
+
+        riesgo_file = OUTPUT_DIR / f"analisis_riesgos_{filename_suffix}.png"
         plt.savefig(riesgo_file, dpi=300, bbox_inches='tight')
         plt.show()
         logging.info(f"Análisis de riesgos guardado en {riesgo_file}")
 
-        # Asignar clasificación al DataFrame principal
-        self.df.loc[df_valid.index, 'Nivel_Riesgo'] = df_valid['Nivel_Riesgo']
+        # Asignar clasificación al DataFrame principal (solo para análisis global)
+        if tipo_seleccionado == "Análisis Global":
+            self.df.loc[df_valid.index, 'Nivel_Riesgo'] = df_valid['Nivel_Riesgo']
 
         # Crear reporte detallado
         porcentaje_alto = (conteo_riesgos.get('Alto Riesgo', 0) / len(df_valid)) * 100
         porcentaje_medio = (conteo_riesgos.get('Riesgo Medio', 0) / len(df_valid)) * 100
         porcentaje_bajo = (conteo_riesgos.get('Bajo Riesgo', 0) / len(df_valid)) * 100
 
-        # Construir información de zonas
+        # Construir información de zonas (solo relevante para análisis global)
         zonas_info = ""
-        if zonas_alto_riesgo or zonas_medio_riesgo or zonas_bajo_riesgo:
+        if tipo_seleccionado == "Análisis Global" and (zonas_alto_riesgo or zonas_medio_riesgo or zonas_bajo_riesgo):
             zonas_info += "\n🗺️ ZONAS IDENTIFICADAS:\n"
             if zonas_alto_riesgo:
                 zonas_info += f"   🔴 ALTO RIESGO: {', '.join(zonas_alto_riesgo[:5])}"
@@ -1590,8 +1629,8 @@ class DataAnalyzer:
                 zonas_info += "\n"
 
         explanation = (
-            f"📊 ANÁLISIS DE RIESGOS AGRÍCOLAS\n\n"
-            f"{campañas_info}"
+            f"📊 {titulo_base.upper()}\n\n"
+            f"{campanas_info}"
             f"🔍 Datos analizados: {len(df_valid):,} registros de producción\n\n"
             f"📈 Estadísticas de Producción:\n"
             f"   • Producción mínima: {min_produccion:,.0f} toneladas\n"
@@ -1611,36 +1650,36 @@ class DataAnalyzer:
             f"   • Implementar mejores prácticas en zonas de riesgo medio\n"
             f"   • Replicar estrategias exitosas de zonas de bajo riesgo"
         )
-        
-        messagebox.showinfo("Análisis de Riesgos Agrícolas", explanation)
+
+        messagebox.showinfo(titulo_base, explanation)
 
 
     def prediccion_tendencias_ia(self):
         """Realiza predicción avanzada de tendencias agrícolas usando múltiples algoritmos de IA con optimización de hiperparámetros."""
         if not self._check_csv_loaded():
             return
-        if 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'campaña' y 'produccion'.")
+        if 'campana' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'campana' y 'produccion'.")
             return
 
         # Preparar datos
-        df_trabajo = self.df.dropna(subset=['campaña', 'produccion']).copy()
+        df_trabajo = self.df.dropna(subset=['campana', 'produccion']).copy()
         if len(df_trabajo) < 10:
             messagebox.showwarning("Advertencia", "Se necesitan al menos 10 registros para el análisis predictivo.")
             return
 
-        # Convertir campaña a valores numéricos para el análisis (manejar formato "2023/2024")
+        # Convertir campana a valores numéricos para el análisis (manejar formato "2023/2024")
         try:
-            # Intentar convertir campañas al formato usado en otras funciones
-            df_trabajo['año_numerico'] = df_trabajo['campaña'].astype(str).str.split('/').str[0].astype(int)
+            # Intentar convertir campanas al formato usado en otras funciones
+            df_trabajo['año_numerico'] = df_trabajo['campana'].astype(str).str.split('/').str[0].astype(int)
         except (ValueError, AttributeError):
             # Si no funciona, intentar conversión directa
-            df_trabajo['año_numerico'] = pd.to_numeric(df_trabajo['campaña'], errors='coerce')
+            df_trabajo['año_numerico'] = pd.to_numeric(df_trabajo['campana'], errors='coerce')
 
         # Filtrar valores válidos
         df_trabajo = df_trabajo.dropna(subset=['año_numerico'])
         if len(df_trabajo) < 10:
-            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos después del procesamiento de las campañas.")
+            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos después del procesamiento de las campanas.")
             return
         df_trabajo['año_numerico'] = df_trabajo['año_numerico'].astype(int)
 
@@ -1892,17 +1931,30 @@ class DataAnalyzer:
                           f"Análisis completado y guardado en {output_file}\n\n{explanation}")
 
     def analisis_predictivo_nn(self):
-        """Realiza un análisis predictivo utilizando una red neuronal simple."""
+        """Realiza un análisis predictivo utilizando una red neuronal simple para un cultivo seleccionado."""
         if not self._check_csv_loaded():
             return
-        if 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns or 'rendimiento' not in self.df.columns or 'produccion' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'sup_sembrada', 'sup_cosechada', 'rendimiento' y 'produccion'.")
+        if 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns or 'rendimiento' not in self.df.columns or 'produccion' not in self.df.columns or 'cultivo' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El DataFrame debe contener las columnas 'sup_sembrada', 'sup_cosechada', 'rendimiento', 'produccion' y 'cultivo'.")
             return
 
+        # Seleccionar cultivo
+        cultivos_disponibles = sorted(self.df['cultivo'].dropna().unique())
+        if not cultivos_disponibles:
+            messagebox.showwarning("Advertencia", "No se encontraron cultivos en los datos.")
+            return
+
+        selected_cultivo = self.ask_option("Seleccionar Cultivo", "Seleccione el cultivo para el análisis predictivo:", cultivos_disponibles)
+        if not selected_cultivo:
+            return
+
+        # Filtrar datos por cultivo seleccionado
+        df_cultivo = self.df[self.df['cultivo'] == selected_cultivo]
+
         # Limpiar datos eliminando filas con NaN
-        df_clean = self.df.dropna(subset=['sup_sembrada', 'sup_cosechada', 'rendimiento', 'produccion'])
+        df_clean = df_cultivo.dropna(subset=['sup_sembrada', 'sup_cosechada', 'rendimiento', 'produccion'])
         if len(df_clean) < 10:
-            messagebox.showwarning("Advertencia", "No hay suficientes datos válidos después de eliminar valores NaN.")
+            messagebox.showwarning("Advertencia", f"No hay suficientes datos válidos para el cultivo '{selected_cultivo}' después de eliminar valores NaN (mínimo 10 requeridos).")
             return
 
         # Preparar datos
@@ -1945,20 +1997,98 @@ class DataAnalyzer:
         logging.info(f"Valores reales correspondientes: {scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel()[:5]}")
 
         # Calcular métricas adicionales
-        mse = mean_squared_error(scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel(), predictions_rescaled)
-        r2 = r2_score(scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel(), predictions_rescaled)
+        y_real = scaler_target.inverse_transform(y_test.reshape(-1, 1)).ravel()
+        mse = mean_squared_error(y_real, predictions_rescaled)
+        rmse = np.sqrt(mse)
+        mae = np.mean(np.abs(y_real - predictions_rescaled))
+        r2 = r2_score(y_real, predictions_rescaled)
+
+        # Estadísticas descriptivas del cultivo
+        prod_media = df_clean['produccion'].mean()
+        prod_std = df_clean['produccion'].std()
+        prod_min = df_clean['produccion'].min()
+        prod_max = df_clean['produccion'].max()
+
+        # Comparación con modelo simple (predicción por la media)
+        pred_media = np.full_like(y_real, prod_media)
+        mse_media = mean_squared_error(y_real, pred_media)
+        r2_media = r2_score(y_real, pred_media)
+
+        # Crear gráficos de comparación
+        fig, ((ax1, ax2)) = plt.subplots(1, 2, figsize=(16, 6))
+
+        # Gráfico 1: Real vs Predicho
+        ax1.scatter(y_real, predictions_rescaled, alpha=0.6, color='blue', edgecolors='black')
+        ax1.plot([y_real.min(), y_real.max()], [y_real.min(), y_real.max()], 'r--', linewidth=2, label='Línea ideal')
+        ax1.set_xlabel('Producción Real (toneladas)')
+        ax1.set_ylabel('Producción Predicha (toneladas)')
+        ax1.set_title(f'Predicciones vs Realidad')
+        ax1.grid(True, alpha=0.3)
+        ax1.legend()
+
+        # Gráfico 2: Distribución de errores (residuos)
+        errores = y_real - predictions_rescaled
+        ax2.scatter(predictions_rescaled, errores, alpha=0.6, color='green', edgecolors='black')
+        ax2.axhline(y=0, color='red', linestyle='--', linewidth=2, label='Sin error')
+        ax2.set_xlabel('Producción Predicha (toneladas)')
+        ax2.set_ylabel('Error (Real - Predicho)')
+        ax2.set_title(f'Distribución de Errores\n(Error promedio: {errores.mean():.1f})')
+        ax2.grid(True, alpha=0.3)
+        ax2.legend()
+
+        plt.suptitle(f"analisis_predictivo_nn - {selected_cultivo}", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
+        plt.tight_layout()
+
+        cultivo_filename = re.sub(r'[^\w\s-]', '', selected_cultivo).strip().replace(' ', '_')
+        output_file = OUTPUT_DIR / f"red_neuronal_{cultivo_filename}.png"
+        plt.savefig(output_file, dpi=300, bbox_inches='tight')
+        plt.show()
 
         explanation = (
-            f"🧠 PREDICCIÓN CON RED NEURONAL\n\n"
-            f"Este análisis usa una 'red neuronal' (como un cerebro artificial) para predecir la producción agrícola "
-            f"usando superficie sembrada, cosechada y rendimiento.\n\n"
-            f"🔍 RESULTADOS:\n"
-            f"   • Error del modelo: {mse:.0f} (más bajo = mejor predicción)\n"
-            f"   • Precisión: {r2:.2f} (más cerca de 1 = más preciso)\n\n"
-            f"💡 ¿QUÉ ES UNA RED NEURONAL?\n"
-            f"   • Un sistema de IA que aprende patrones complejos\n"
-            f"   • Útil cuando las relaciones no son simples\n\n"
-            f"📋 USO: Predecir producción basada en múltiples variables"
+            f"🧠 PREDICCIÓN AVANZADA CON RED NEURONAL - {selected_cultivo.upper()}\n\n"
+            f"Este análisis utiliza Inteligencia Artificial (una 'red neuronal' similar a un cerebro) para predecir "
+            f"la producción agrícola del cultivo '{selected_cultivo}' basándose en variables como superficie sembrada, "
+            f"superficie cosechada y rendimiento.\n\n"
+            f"📊 DATOS DEL CULTIVO ANALIZADO:\n"
+            f"   • Registros válidos: {len(df_clean)}\n"
+            f"   • Producción promedio: {prod_media:.0f} toneladas\n"
+            f"   • Producción mínima: {prod_min:.0f} toneladas\n"
+            f"   • Producción máxima: {prod_max:.0f} toneladas\n"
+            f"   • Variabilidad (desviación estándar): {prod_std:.0f} toneladas\n\n"
+            f"🤖 ARQUITECTURA DE LA RED NEURONAL:\n"
+            f"   • Entradas: 3 variables (sup. sembrada, sup. cosechada, rendimiento)\n"
+            f"   • Capas ocultas: 2 (10 y 8 neuronas)\n"
+            f"   • Salida: 1 valor (producción predicha)\n"
+            f"   • Entrenamiento: 100 epochs con optimización automática\n\n"
+            f"📈 MÉTRICAS DE RENDIMIENTO:\n"
+            f"   • Error Cuadrático Medio (MSE): {mse:.0f}\n"
+            f"     ↳ Mide el promedio de los errores al cuadrado\n"
+            f"   • Error Absoluto Medio (MAE): {mae:.0f}\n"
+            f"     ↳ Error promedio en valor absoluto (más fácil de interpretar)\n"
+            f"   • Raíz del Error Cuadrático Medio (RMSE): {rmse:.0f}\n"
+            f"     ↳ Error típico en las mismas unidades que la producción\n"
+            f"   • Coeficiente de Determinación (R²): {r2:.3f}\n"
+            f"     ↳ Porcentaje de variabilidad explicada (1.0 = predicción perfecta)\n\n"
+            f"⚖️ COMPARACIÓN CON MODELO SIMPLE:\n"
+            f"   • Si siempre predijéramos la media ({prod_media:.0f} ton): R² = {r2_media:.3f}\n"
+            f"   • Nuestra red neuronal: R² = {r2:.3f}\n"
+            f"   • Mejora respecto a la media: {(r2 - r2_media)*100:.1f}%\n\n"
+            f"💡 INTERPRETACIÓN DE RESULTADOS:\n"
+            f"   • R² > 0.8: Excelente predicción\n"
+            f"   • R² 0.6-0.8: Buena predicción\n"
+            f"   • R² 0.3-0.6: Predicción aceptable\n"
+            f"   • R² < 0.3: Predicción pobre (revisar datos o modelo)\n\n"
+            f"🔬 ¿POR QUÉ USAR RED NEURONAL?\n"
+            f"   • Aprende relaciones no lineales complejas\n"
+            f"   • Maneja múltiples variables simultáneamente\n"
+            f"   • Se adapta automáticamente a patrones en los datos\n"
+            f"   • Útil cuando las relaciones entre variables no son simples\n\n"
+            f"📋 APLICACIONES PRÁCTICAS:\n"
+            f"   • Planificación de siembra basada en predicciones\n"
+            f"   • Optimización de recursos agrícolas\n"
+            f"   • Toma de decisiones ante incertidumbre climática\n"
+            f"   • Evaluación de eficiencia productiva\n\n"
+            f"📊 Gráfico guardado en: {output_file}"
         )
         messagebox.showinfo("Análisis Predictivo con Red Neuronal", explanation)
 
@@ -2238,12 +2368,12 @@ class DataAnalyzer:
         """Genera un gráfico de líneas para los 4 principales cultivos por producción total."""
         if not self._check_csv_loaded():
             return
-        if 'cultivo' not in self.df.columns or 'campaña' not in self.df.columns or 'produccion' not in self.df.columns:
-            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'cultivo', 'campaña' y 'produccion'.")
+        if 'cultivo' not in self.df.columns or 'campana' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El archivo CSV debe contener las columnas 'cultivo', 'campana' y 'produccion'.")
             return
 
-        # Agrupar los datos por cultivo y campaña, y sumar la producción
-        grouped_data = self.df.groupby(['cultivo', 'campaña'])['produccion'].sum().reset_index()
+        # Agrupar los datos por cultivo y campana, y sumar la producción
+        grouped_data = self.df.groupby(['cultivo', 'campana'])['produccion'].sum().reset_index()
 
         # Obtener los 4 principales cultivos por producción total
         top_cultivos = grouped_data.groupby('cultivo')['produccion'].sum().nlargest(4).index
@@ -2251,13 +2381,13 @@ class DataAnalyzer:
         # Filtrar los datos para incluir solo los 4 cultivos principales
         filtered_data = grouped_data[grouped_data['cultivo'].isin(top_cultivos)]
 
-        # Crear un gráfico de líneas que muestre la producción por campaña para los 4 cultivos principales
+        # Crear un gráfico de líneas que muestre la producción por campana para los 4 cultivos principales
         plt.figure(figsize=(12, 8))
         for cultivo in top_cultivos:
             cultivo_data = filtered_data[filtered_data['cultivo'] == cultivo]
-            plt.plot(cultivo_data['campaña'], cultivo_data['produccion'], marker='o', label=cultivo)
+            plt.plot(cultivo_data['campana'], cultivo_data['produccion'], marker='o', label=cultivo)
 
-        plt.title('Producción de los 4 principales cultivos por campaña')
+        plt.title('Producción de los 4 principales cultivos por campana')
         plt.xlabel('Campaña')
         plt.ylabel('Producción (en toneladas)')
         plt.xticks(rotation=45)
@@ -2310,7 +2440,7 @@ class DataAnalyzer:
             "Modelos Predictivos": "modelos_predictivos",
             "Clasificación de Cultivos": "clasificacion_cultivos",
             "Análisis de Riesgos": "analisis_riesgos",
-            "Evolución de Cultivos por Campaña": "evolucion_cultivos_por_campaña",
+            "Evolución de Cultivos por Campaña": "evolucion_cultivos_por_campana",
             "Tendencias de Producción por Cultivo": "tendencias_produccion_por_cultivo",
             "Predicción de Tendencias con IA": "prediccion_tendencias_ia",
             "Análisis Predictivo con Red Neuronal": "analisis_predictivo_nn",
