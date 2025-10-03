@@ -1,0 +1,327 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox, ttk
+import pandas as pd
+import folium
+import webbrowser
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pathlib import Path
+import logging
+from time import sleep
+from geopy.geocoders import Nominatim
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+geolocator = Nominatim(user_agent="geopy/1.22.0 (github.com/geopy/geopy)")
+
+class DataAnalyzer:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Aplicación de Análisis de Datos")
+        self.df = pd.DataFrame()
+        self.mapa_generado = False
+
+        self.menu = tk.Menu(self.root)
+        self.root.config(menu=self.menu)
+
+        self.file_menu = tk.Menu(self.menu, tearoff=0)
+        self.menu.add_cascade(label="Archivo", menu=self.file_menu)
+        self.file_menu.add_command(label="Cargar CSV", command=self.cargar_csv)
+        self.file_menu.add_command(label="Salir", command=self.root.quit)
+
+        self.analisis_menu = tk.Menu(self.menu, tearoff=0)
+        self.menu.add_cascade(label="Análisis", menu=self.analisis_menu)
+        self.analisis_menu.add_command(label="Sumar Columnas", command=self.sumar_columnas)
+        self.analisis_menu.add_command(label="Análisis Temporal", command=self.analisis_temporal)
+        self.analisis_menu.add_command(label="Análisis Geoespacial", command=self.analisis_geoespacial)
+        self.analisis_menu.add_command(label="Análisis de Correlación", command=self.analisis_correlacion)
+        self.analisis_menu.add_command(label="Modelos Predictivos", command=self.modelos_predictivos)
+        self.analisis_menu.add_command(label="Análisis de Riesgos", command=self.analisis_riesgos)
+        self.analisis_menu.add_command(label="Correlación Sup. Sembrada-Sup. Cosechada", command=self.correlacion_superficie_produccion)
+        self.analisis_menu.add_command(label="Producción Total por Provincia", command=self.produccion_total_por_provincia)
+
+        self.geocodificacion_menu = tk.Menu(self.menu, tearoff=0)
+        self.menu.add_cascade(label="Geocodificación", menu=self.geocodificacion_menu)
+        self.geocodificacion_menu.add_command(label="Geocodificar Direcciones", command=self.geocodificar_direcciones)
+        self.geocodificacion_menu.add_command(label="Generar Mapa", command=self.generar_mapa)
+
+    def cargar_csv(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            try:
+                self.df = pd.read_csv(file_path)
+                logging.debug(f"Archivo CSV cargado: {file_path}")
+                messagebox.showinfo("Cargar CSV", "Archivo CSV cargado exitosamente.")
+            except Exception as e:
+                logging.error(f"Error al cargar el archivo CSV: {e}")
+                messagebox.showerror("Error", f"Ocurrió un error al cargar el archivo CSV: {e}")
+
+    def produccion_total_por_provincia(self):
+        if self.df.empty or 'provincia' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'provincia' y 'produccion'.")
+            return
+
+        produccion_por_provincia = self.df.groupby('provincia')['produccion'].sum().sort_values(ascending=False)
+
+        produccion_por_provincia.plot(kind='bar')
+        plt.title("Producción Total por Provincia")
+        plt.ylabel("Producción [Tn]")
+        plt.xlabel("Provincias")
+        plt.tight_layout()
+
+        produccion_por_provincia_file = OUTPUT_DIR / "produccion_por_provincia.png"
+        plt.savefig(produccion_por_provincia_file)
+        plt.show()
+        logging.debug(f"Gráfica de producción total por provincia guardada en {produccion_por_provincia_file}")
+
+        messagebox.showinfo("Producción Total por Provincia", f"Gráfica de producción total por provincia guardada en {produccion_por_provincia_file}")
+
+    def correlacion_superficie_produccion(self):
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "El DataFrame está vacío. Por favor, cargue un archivo CSV primero.")
+            return
+
+        if 'provincia' not in self.df.columns or 'sup_sembrada' not in self.df.columns or 'sup_cosechada' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'provincia', 'sup_sembrada' y 'sup_cosechada'.")
+            return
+
+        provincias = self.df['provincia'].unique()
+        selected_provincia = self.ask_option("Seleccionar Provincia", "Seleccione la provincia:", provincias)
+
+        if not selected_provincia:
+            return
+
+        df_provincia = self.df[self.df['provincia'] == selected_provincia]
+
+        if df_provincia.empty:
+            messagebox.showwarning("Advertencia", "No se encontraron datos para la provincia seleccionada.")
+            return
+
+        df_provincia[['sup_sembrada', 'sup_cosechada']] = df_provincia[['sup_sembrada', 'sup_cosechada']].apply(pd.to_numeric, errors='coerce')
+        df_provincia = df_provincia.dropna(subset=['sup_sembrada', 'sup_cosechada'])
+
+        if df_provincia.empty:
+            messagebox.showwarning("Advertencia", "Después de la conversión a numérico, no se encontraron datos válidos para calcular la correlación.")
+            return
+
+        try:
+            correlacion = df_provincia[['sup_sembrada', 'sup_cosechada']].corr().iloc[0, 1]
+            if correlacion >= 0.7:
+                messagebox.showinfo("Correlación Sup. Sembrada-Sup. Cosechada", f"Correlación alta ({correlacion:.2f}). Sugerencia: Explorar variedades de cultivos que optimicen la superficie cosechada.")
+            elif correlacion <= 0.3:
+                messagebox.showinfo("Correlación Sup. Sembrada-Sup. Cosechada", f"Correlación baja ({correlacion:.2f}). Sugerencia: Revisar prácticas de cultivo y factores ambientales.")
+            else:
+                messagebox.showinfo("Correlación Sup. Sembrada-Sup. Cosechada", f"Correlación moderada ({correlacion:.2f}). Considerar diversificación de cultivos.")
+        except Exception as e:
+            logging.error(f"Error al calcular la correlación: {e}")
+            messagebox.showerror("Error", f"Ocurrió un error al calcular la correlación: {e}")
+
+    def ask_option(self, title, message, options):
+        dialog = tk.Toplevel(self.root)
+        dialog.title(title)
+        dialog.geometry("250x150")
+        dialog.resizable(False, False)
+
+        label = tk.Label(dialog, text=message)
+        label.pack(pady=10)
+
+        combobox_value = tk.StringVar()
+        combobox = ttk.Combobox(dialog, textvariable=combobox_value, values=options)
+        combobox.pack(pady=10)
+        combobox.current(0)
+
+        button = tk.Button(dialog, text="Aceptar", command=dialog.destroy)
+        button.pack(pady=10)
+
+        dialog.grab_set()
+        dialog.wait_window()
+
+        selected_option = combobox_value.get()
+        return selected_option
+
+    def sumar_columnas(self):
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "Por favor cargue un archivo CSV primero.")
+            return
+
+        suma_columnas = self.df.select_dtypes(include=[float, int]).sum()
+        suma_columnas.plot(kind='bar')
+        plt.title("Suma de Columnas Numéricas")
+        plt.ylabel("Suma")
+        plt.xlabel("Columnas")
+        plt.tight_layout()
+
+        suma_columnas_file = OUTPUT_DIR / "suma_columnas.png"
+        plt.savefig(suma_columnas_file)
+        plt.show()
+        logging.debug(f"Gráfica de suma de columnas guardada en {suma_columnas_file}")
+
+        messagebox.showinfo("Suma de Columnas", f"Gráfica de suma de columnas guardada en {suma_columnas_file}")
+
+    def analisis_temporal(self):
+        if self.df.empty or 'campaña' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga la columna 'campaña'.")
+            return
+
+        if 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga la columna 'produccion'.")
+            return
+
+        self.df['campaña'] = pd.to_datetime(self.df['campaña'], errors='coerce')
+        df_temporal = self.df.groupby(self.df['campaña'].dt.year).sum(numeric_only=True)
+
+        df_temporal.plot(y='produccion', kind='line')
+        plt.title("Análisis Temporal de Producción")
+        plt.ylabel("Producción [Tn]")
+        plt.xlabel("Año")
+        plt.tight_layout()
+
+        temporal_file = OUTPUT_DIR / "analisis_temporal.png"
+        plt.savefig(temporal_file)
+        plt.show()
+        logging.debug(f"Gráfica de análisis temporal guardada en {temporal_file}")
+
+        messagebox.showinfo("Análisis Temporal", f"Gráfica de análisis temporal guardada en {temporal_file}")
+
+    def analisis_geoespacial(self):
+        if self.df.empty or 'pais' not in self.df.columns or 'provincia' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'pais' y 'provincia'.")
+            return
+
+        self.df['coordenadas'] = self.df.apply(lambda row: self.geocodificar(row['provincia'] + ', ' + row['pais']), axis=1)
+        self.df = self.df.dropna(subset=['coordenadas'])
+
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "No se pudieron obtener coordenadas para las ubicaciones.")
+            return
+
+        mapa = folium.Map(location=[self.df['coordenadas'].apply(lambda x: x[0]).mean(), self.df['coordenadas'].apply(lambda x: x[1]).mean()], zoom_start=6)
+
+        for _, row in self.df.iterrows():
+            folium.Marker([row['coordenadas'][0], row['coordenadas'][1]], popup=row['provincia']).add_to(mapa)
+
+        mapa_file = OUTPUT_DIR / "mapa_cultivos.html"
+        mapa.save(mapa_file)
+        webbrowser.open(str(mapa_file))  # Convertir a cadena
+        logging.debug(f"Mapa geoespacial guardado en {mapa_file}")
+
+        messagebox.showinfo("Análisis Geoespacial", f"Mapa geoespacial guardado en {mapa_file}")
+
+    def geocodificar(self, direccion):
+        try:
+            location = geolocator.geocode(direccion)
+            if location:
+                return (location.latitude, location.longitude)
+            else:
+                return None
+        except (GeocoderTimedOut, GeocoderServiceError) as e:
+            logging.error(f"Error en la geocodificación: {e}")
+            return None
+
+    def geocodificar_direcciones(self):
+        if self.df.empty or 'provincia' not in self.df.columns or 'pais' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "Por favor, asegúrese de que el archivo CSV contenga las columnas 'pais' y 'provincia'.")
+            return
+
+        self.df['coordenadas'] = self.df.apply(lambda row: self.geocodificar(row['provincia'] + ', ' + row['pais']), axis=1)
+        self.df = self.df.dropna(subset=['coordenadas'])
+
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "No se pudieron obtener coordenadas para las ubicaciones.")
+            return
+
+        messagebox.showinfo("Geocodificación", "Geocodificación completada exitosamente.")
+
+    def generar_mapa(self):
+        if not self.mapa_generado:
+            self.analisis_geoespacial()
+            self.mapa_generado = True
+        else:
+            webbrowser.open(str(OUTPUT_DIR / "mapa_cultivos.html"))  # Convertir a cadena
+
+    def analisis_correlacion(self):
+        if self.df.empty:
+            messagebox.showwarning("Advertencia", "El DataFrame está vacío. Por favor, cargue un archivo CSV primero.")
+            return
+
+        if self.df.select_dtypes(include=[float, int]).empty:
+            messagebox.showwarning("Advertencia", "No hay columnas numéricas para analizar.")
+            return
+
+        plt.figure(figsize=(10, 8))
+        correlation_matrix = self.df.select_dtypes(include=[float, int]).corr()
+        sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', fmt='.2f')
+        plt.title("Matriz de Correlación")
+        plt.tight_layout()
+
+        correlacion_file = OUTPUT_DIR / "matriz_correlacion.png"
+        plt.savefig(correlacion_file)
+        plt.show()
+        logging.debug(f"Matriz de correlación guardada en {correlacion_file}")
+
+        messagebox.showinfo("Análisis de Correlación", f"Matriz de correlación guardada en {correlacion_file}")
+
+    def modelos_predictivos(self):
+        if self.df.empty or 'sup_sembrada' not in self.df.columns or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El DataFrame debe contener 'sup_sembrada' y 'produccion'.")
+            return
+
+        X = self.df[['sup_sembrada']].values
+        y = self.df['produccion'].values
+
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+        model = LinearRegression()
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        mse = mean_squared_error(y_test, y_pred)
+        r2 = r2_score(y_test, y_pred)
+
+        messagebox.showinfo("Modelo Predictivo", f"Error cuadrático medio (MSE): {mse:.2f}\nCoeficiente de determinación (R2): {r2:.2f}")
+
+    def analisis_riesgos(self):
+        if self.df.empty or 'produccion' not in self.df.columns:
+            messagebox.showwarning("Advertencia", "El DataFrame debe contener la columna 'produccion'.")
+            return
+
+        # Normalización de datos
+        scaler = StandardScaler()
+        df_normalizado = scaler.fit_transform(self.df[['produccion']].dropna())
+
+        # Reducción de dimensionalidad
+        pca = PCA(n_components=2)
+        df_reducido = pca.fit_transform(df_normalizado)
+
+        # Clustering
+        kmeans = KMeans(n_clusters=3, random_state=42)
+        clusters = kmeans.fit_predict(df_reducido)
+
+        self.df['cluster'] = clusters
+        plt.figure(figsize=(10, 8))
+        plt.scatter(df_reducido[:, 0], df_reducido[:, 1], c=clusters, cmap='viridis')
+        plt.title("Clustering de Producción")
+        plt.xlabel("Componente Principal 1")
+        plt.ylabel("Componente Principal 2")
+        plt.colorbar(label='Cluster')
+
+        clustering_file = OUTPUT_DIR / "clustering_produccion.png"
+        plt.savefig(clustering_file)
+        plt.show()
+        logging.debug(f"Gráfica de clustering guardada en {clustering_file}")
+
+        messagebox.showinfo("Análisis de Riesgos", f"Gráfica de clustering de producción guardada en {clustering_file}")
+
+if __name__ == "__main__":
+    app = DataAnalyzer()
+    app.root.mainloop()

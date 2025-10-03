@@ -431,6 +431,7 @@ class DataAnalyzer:
         self.menu.add_cascade(label="Ayuda", menu=self.help_menu)
         self.help_menu.add_command(label="Acerca de", command=self.acerca_de)
         self.help_menu.add_command(label="Manual de Usuario", command=self.manual_usuario)
+        self.help_menu.add_command(label="Agradecimientos", command=self.agradecimientos)
 
     def cargar_csv(self):
         """Carga un archivo CSV utilizando la clase FileHandler."""
@@ -932,8 +933,6 @@ class DataAnalyzer:
 
         explanation = (
             "🔗 ANÁLISIS DE CORRELACIÓN AGRÍCOLA - RESULTADOS PERSONALIZADOS\n\n"
-            "Imagínate que tienes un grupo de amigos y quieres saber cómo se relacionan entre sí. "
-            "Eso es exactamente lo que hemos hecho con tus variables agrícolas.\n\n"
             "📊 LO QUE ANALIZAMOS EN TUS DATOS:\n"
             f"   • {total_vars} variables agrícolas de tu dataset\n"
             f"   • {strong_correlations} conexiones muy fuertes encontradas\n"
@@ -2130,11 +2129,9 @@ class DataAnalyzer:
         ax1_twin.legend(loc='upper right')
 
         # Agregar valores en barras
-        ax1.text(bars1.get_x() + bars1.get_width()/2, bars1.get_height() + 0.01,
-                f'{r2:.3f}', ha='center', va='bottom', fontsize=8)
+        ax1.text(0 + width/2, r2 + 0.01, f'{r2:.3f}', ha='center', va='bottom', fontsize=8)
 
-        ax1_twin.text(bars2.get_x() + bars2.get_width()/2, bars2.get_height() + rmse*0.02,
-                     f'{rmse:.0f}', ha='center', va='bottom', fontsize=8)
+        ax1_twin.text(width + width/2, rmse + rmse*0.02, f'{rmse:.0f}', ha='center', va='bottom', fontsize=8)
 
         # Gráfico 2: Predicciones vs Valores Reales
         ax2.scatter(y_test_orig, y_pred, alpha=0.6, color='green', s=50)
@@ -2954,6 +2951,21 @@ class DataAnalyzer:
         # Centrar ventana
         ventana_manual.transient(self.root)
         ventana_manual.grab_set()
+
+    def agradecimientos(self):
+        """Muestra una ventana con los agradecimientos."""
+        agradecimientos_texto = (
+            "🌟 AGRADECIMIENTOS 🌟\n\n"
+            "Queremos expresar nuestro más sincero agradecimiento a nuestras familias, "
+            "por su apoyo incondicional, paciencia y motivación constante durante este proceso de tesis.\n\n"
+            "A nuestro mentor de tesis, Gustavo García, por su guía experta, consejos valiosos "
+            "y dedicación que nos ayudaron a navegar los desafíos técnicos y académicos.\n\n"
+            "Y a quienes ya no están con nosotros físicamente, pero que desde donde estén "
+            "nos apoyaron y nos inspiraron para llegar a esta instancia.\n\n"
+            "Gracias por ser parte de este logro. 🙏"
+        )
+
+        messagebox.showinfo("Agradecimientos", agradecimientos_texto)
 
     @staticmethod
     def safe_file_name(name):
