@@ -27,6 +27,7 @@ import tensorflow as tf
 import numpy as np
 import requests
 import os
+from PIL import Image, ImageTk
 
 # Logging configuration
 logging.basicConfig(level=logging.INFO,
@@ -321,10 +322,71 @@ class Visualization:
 class DataAnalyzer:
     def __init__(self):
         self.root = tk.Tk()
-        self.root.title("Aplicación de Análisis de Datos")
+        self.root.title("🌾 Aplicación de Análisis Agrícola con IA")
         self.root.geometry("600x400")
+
+        # Intentar cargar ícono
+        self.cargar_icono()
+
         self.df = pd.DataFrame()
         self.setup_menu()
+
+    def cargar_icono(self):
+        """Carga un ícono para la aplicación si está disponible."""
+        try:
+            # Buscar ícono en el directorio actual
+            icono_path = Path("icono_agricola.png")
+            if icono_path.exists():
+                # Cargar imagen con PIL
+                imagen = Image.open(icono_path)
+                # Redimensionar si es necesario
+                imagen = imagen.resize((64, 64), Image.Resampling.LANCZOS)
+                icono = ImageTk.PhotoImage(imagen)
+                self.root.iconphoto(True, icono)
+            else:
+                # Crear ícono simple si no hay imagen
+                self.crear_icono_simple()
+        except Exception as e:
+            logging.warning(f"No se pudo cargar ícono: {e}")
+            # Crear ícono simple como fallback
+            self.crear_icono_simple()
+
+    def crear_icono_simple(self):
+        """Crea un ícono simple agrícola usando canvas."""
+        try:
+            # Crear una imagen simple de 64x64 con colores agrícolas
+            canvas = tk.Canvas(self.root, width=64, height=64, highlightthickness=0)
+            canvas.pack()
+
+            # Fondo verde (campo)
+            canvas.create_rectangle(0, 0, 64, 64, fill='#4CAF50', outline='')
+
+            # Tallos de trigo simplificados
+            for i in range(3):
+                x = 16 + i * 16
+                # Tallo
+                canvas.create_line(x, 45, x, 20, fill='#8BC34A', width=2)
+                # Espigas
+                canvas.create_oval(x-3, 15, x+3, 25, fill='#CDDC39', outline='')
+
+            # Sol simplificado
+            canvas.create_oval(45, 10, 55, 20, fill='#FFC107', outline='')
+
+            # Convertir canvas a imagen
+            from PIL import ImageGrab
+            # Esta parte puede no funcionar en todos los sistemas
+            # Como alternativa, usaremos un ícono por defecto si está disponible
+
+            # Intentar usar un ícono por defecto del sistema
+            try:
+                self.root.iconbitmap(default='')  # Esto puede funcionar en algunos sistemas
+            except:
+                pass
+
+            canvas.destroy()  # Limpiar canvas temporal
+
+        except Exception as e:
+            logging.warning(f"No se pudo crear ícono simple: {e}")
     def _check_csv_loaded(self):
         """Verifica si el CSV está cargado y muestra un mensaje si no lo está."""
         if self.df.empty:
@@ -364,6 +426,12 @@ class DataAnalyzer:
         self.geocodificacion_menu.add_command(label="Generar Mapa", command=self.generar_mapa)
         self.geocodificacion_menu.add_command(label="Mapa de Distribución de Cultivos", command=self.mapa_distribucion_cultivos)
 
+        # Menú de Ayuda
+        self.help_menu = tk.Menu(self.menu, tearoff=0)
+        self.menu.add_cascade(label="Ayuda", menu=self.help_menu)
+        self.help_menu.add_command(label="Acerca de", command=self.acerca_de)
+        self.help_menu.add_command(label="Manual de Usuario", command=self.manual_usuario)
+
     def cargar_csv(self):
         """Carga un archivo CSV utilizando la clase FileHandler."""
         self.df = FileHandler.cargar_csv()
@@ -400,12 +468,12 @@ class DataAnalyzer:
         variable_mayor_variabilidad = coef_variacion.idxmax()
         variable_mas_estable = coef_variacion.idxmin()
 
-        # Crear visualización mejorada con múltiples subgráficos
-        fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
+        # Crear visualización mejorada con 3 subgráficos principales
+        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=(18, 6))
 
         # Gráfico 1: Totales por variable (suma)
         suma_columnas.plot(kind='bar', ax=ax1, color='lightblue', edgecolor='navy')
-        ax1.set_title('Totales Acumulados por Variable')
+        ax1.set_title('a) Totales Acumulados por Variable')
         ax1.set_xlabel('Variables Numéricas')
         ax1.set_ylabel('Suma Total')
         ax1.tick_params(axis='x', rotation=45)
@@ -418,7 +486,7 @@ class DataAnalyzer:
         # Gráfico 2: Promedios por variable
         promedios = df_numeric.mean()
         promedios.plot(kind='bar', ax=ax2, color='lightgreen', edgecolor='darkgreen')
-        ax2.set_title('Valores Promedio por Variable')
+        ax2.set_title('b) Valores Promedio por Variable')
         ax2.set_xlabel('Variables Numéricas')
         ax2.set_ylabel('Promedio')
         ax2.tick_params(axis='x', rotation=45)
@@ -431,7 +499,7 @@ class DataAnalyzer:
         # Gráfico 3: Coeficiente de variación (estabilidad)
         colores_cv = ['red' if cv > 100 else 'orange' if cv > 50 else 'green' for cv in coef_variacion.values]
         coef_variacion.plot(kind='bar', ax=ax3, color=colores_cv, edgecolor='black')
-        ax3.set_title('Coeficiente de Variación por Variable (%)')
+        ax3.set_title('c) Coeficiente de Variación por Variable (%)')
         ax3.set_xlabel('Variables Numéricas')
         ax3.set_ylabel('Coeficiente de Variación (%)')
         ax3.tick_params(axis='x', rotation=45)
@@ -444,31 +512,9 @@ class DataAnalyzer:
         for i, v in enumerate(coef_variacion.values):
             ax3.text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontsize=8, fontweight='bold')
 
-        # Gráfico 4: Comparación Min-Max-Promedio
-        variables_principales = suma_columnas.nlargest(6).index  # Top 6 variables
-        df_principales = df_numeric[variables_principales]
-
-        x_pos = np.arange(len(variables_principales))
-        width = 0.25
-
-        mins = df_principales.min()
-        maxs = df_principales.max()
-        means = df_principales.mean()
-
-        ax4.bar(x_pos - width, mins, width, label='Mínimo', color='lightcoral', alpha=0.8)
-        ax4.bar(x_pos, means, width, label='Promedio', color='lightskyblue', alpha=0.8)
-        ax4.bar(x_pos + width, maxs, width, label='Máximo', color='lightgreen', alpha=0.8)
-
-        ax4.set_title('Comparación Min-Promedio-Max (Top 6 Variables)')
-        ax4.set_xlabel('Variables Principales')
-        ax4.set_ylabel('Valores')
-        ax4.set_xticks(x_pos)
-        ax4.set_xticklabels(variables_principales, rotation=45)
-        ax4.legend()
-        ax4.grid(True, alpha=0.3)
-
         plt.suptitle("sumar_columnas", fontsize=10, y=0.98, ha='left', x=0.02, style='italic', alpha=0.7)
         plt.tight_layout()
+        plt.subplots_adjust(top=0.88, wspace=0.3)
 
         # Guardar gráfico
         output_file = OUTPUT_DIR / "analisis_estadistico_integral.png"
@@ -476,22 +522,9 @@ class DataAnalyzer:
         plt.show()
         logging.info(f"Análisis estadístico integral guardado en {output_file}")
 
-        # Análisis de correlaciones entre variables principales
-        correlaciones_importantes = []
-        if len(variables_principales) > 1:
-            corr_matrix = df_principales.corr()
-            # Encontrar correlaciones fuertes (>0.7 o <-0.7)
-            for i in range(len(corr_matrix.columns)):
-                for j in range(i+1, len(corr_matrix.columns)):
-                    corr_val = corr_matrix.iloc[i, j]
-                    if abs(corr_val) > 0.7:
-                        var1 = corr_matrix.columns[i]
-                        var2 = corr_matrix.columns[j]
-                        correlaciones_importantes.append(f"{var1} ↔ {var2}: {corr_val:.3f}")
-
-        # Identificar outliers usando el método IQR
+        # Identificar outliers usando el método IQR para todas las variables
         outliers_info = []
-        for col in variables_principales:
+        for col in numeric_cols:
             Q1 = df_numeric[col].quantile(0.25)
             Q3 = df_numeric[col].quantile(0.75)
             IQR = Q3 - Q1
@@ -502,31 +535,57 @@ class DataAnalyzer:
                 outliers_info.append(f"{col}: {len(outliers)} valores atípicos ({len(outliers)/len(df_numeric)*100:.1f}%)")
 
         # Crear reporte detallado
-        correlaciones_texto = "\n".join(correlaciones_importantes[:5]) if correlaciones_importantes else "No se encontraron correlaciones fuertes (>0.7)"
         outliers_texto = "\n".join(outliers_info[:5]) if outliers_info else "No se detectaron valores atípicos significativos"
 
+        # Crear explicaciones detalladas para cada suma
+        explicaciones_sumas = []
+        for col in suma_columnas.index:
+            col_lower = col.lower()
+            suma_valor = suma_columnas[col]
+
+            if 'sup' in col_lower and 'sembrada' in col_lower:
+                explicacion = f"Superficie total sembrada: {suma_valor:,.0f} hectáreas. Representa la extensión total de tierra utilizada para siembra en el período analizado."
+            elif 'sup' in col_lower and 'cosechada' in col_lower:
+                explicacion = f"Superficie total cosechada: {suma_valor:,.0f} hectáreas. Área efectiva que se logró cosechar exitosamente."
+            elif 'prod' in col_lower:
+                explicacion = f"Producción total: {suma_valor:,.0f} toneladas. Volumen total de cultivos obtenidos en el período."
+            elif 'rend' in col_lower:
+                explicacion = f"Rendimiento total acumulado: {suma_valor:,.0f} kg/ha. Suma de todos los rendimientos individuales registrados."
+            else:
+                explicacion = f"Total acumulado de '{col}': {suma_valor:,.0f}. Suma de todos los valores registrados para esta variable."
+
+            explicaciones_sumas.append(f"   • {explicacion}")
+
+        explicaciones_sumas_texto = "\n".join(explicaciones_sumas)
+
         explanation = (
-            "📊 ANÁLISIS DE SUMA DE COLUMNAS\n\n"
-            "Este análisis suma todas las columnas numéricas de tus datos "
-            "agrícolas y calcula estadísticas básicas.\n\n"
+            "📊 ANÁLISIS ESTADÍSTICO DE VARIABLES NUMÉRICAS\n\n"
+            "Este análisis examina todas las columnas numéricas de tus datos "
+            "agrícolas mostrando totales, promedios y estabilidad de cada variable.\n\n"
             f"🔍 Lo que se analizó: {len(df_numeric):,} registros con datos completos\n"
             f"📈 Columnas numéricas encontradas: {len(numeric_cols)}\n\n"
+            "📊 LOS 3 GRÁFICOS MUESTRAN:\n"
+            "   a) Totales acumulados - Qué variables tienen los números más grandes\n"
+            "   b) Valores promedio - El promedio de cada variable\n"
+            "   c) Coeficiente de variación - Qué variables son más estables\n\n"
             "🏆 RESULTADOS PRINCIPALES:\n"
-            f"   • La columna con mayor suma total es: {variable_mayor_suma} "
+            f"   • Variable con mayor suma total: {variable_mayor_suma} "
             f"(total: {suma_columnas[variable_mayor_suma]:,.0f})\n"
-            f"   • La columna más variable es: {variable_mayor_variabilidad} (cambia mucho)\n"
-            f"   • La columna más estable es: {variable_mas_estable} (cambia poco)\n\n"
+            f"   • Variable más variable: {variable_mayor_variabilidad} (cambia mucho)\n"
+            f"   • Variable más estable: {variable_mas_estable} (cambia poco)\n\n"
             "📊 NÚMEROS BÁSICOS:\n"
-            f"   • Promedio general de todas las columnas: {df_numeric.mean().mean():,.1f}\n"
-            f"   • Valores que se salen de lo normal encontrados: {outliers_texto}\n\n"
-            "💡 ¿QUÉ SIGNIFICA ESTO?\n"
-            "   • Las columnas con números más grandes son las más importantes en tus datos\n"
-            "   • Si una columna cambia mucho, es menos predecible\n"
-            "   • Los valores atípicos pueden ser errores o casos especiales\n\n"
-            "📋 PARA QUÉ SIRVE:\n"
-            "   • Saber cuáles son las variables más importantes\n"
-            "   • Detectar problemas en los datos\n"
-            "   • Decidir qué analizar primero"
+            f"   • Promedio general de todas las variables: {df_numeric.mean().mean():,.1f}\n"
+            f"   • Valores atípicos detectados: {outliers_texto}\n\n"
+            "💰 EXPLICACIÓN DETALLADA DE CADA SUMA:\n"
+            f"{explicaciones_sumas_texto}\n\n"
+            "💡 INTERPRETACIÓN:\n"
+            "   • Barras más altas = variables más importantes\n"
+            "   • Colores en gráfico c): Verde=estable, Naranja=medio, Rojo=variable\n"
+            "   • Valores atípicos pueden indicar errores o casos especiales\n\n"
+            "📋 UTILIDAD PRÁCTICA:\n"
+            "   • Identificar variables más relevantes para análisis\n"
+            "   • Detectar problemas de calidad en los datos\n"
+            "   • Guiar decisiones sobre qué variables priorizar"
         )
 
         messagebox.showinfo("Análisis Estadístico Integral", f"Análisis completado y guardado en {output_file}\n\n{explanation}")
@@ -847,27 +906,153 @@ class DataAnalyzer:
         strong_correlations = sum(1 for _, _, corr in all_correlations if abs(corr) > 0.7)
         moderate_correlations = sum(1 for _, _, corr in all_correlations if 0.3 <= abs(corr) <= 0.7)
 
+        # Crear explicación responsive basada en los resultados específicos
+        explicacion_resultados = ""
+
+        if top_5:
+            explicacion_resultados += "🔍 TUS RESULTADOS ESPECÍFICOS:\n\n"
+            for i, (var1, var2, corr) in enumerate(top_5[:3], 1):  # Mostrar top 3
+                var1_clean = var1.replace('_', ' ').title()
+                var2_clean = var2.replace('_', ' ').title()
+                tipo_corr = "POSITIVA FUERTE" if corr > 0.7 else "NEGATIVA FUERTE" if corr < -0.7 else "MODERADA"
+                explicacion_resultados += f"   {i}️⃣ {var1_clean} ↔ {var2_clean}: {corr:.3f} ({tipo_corr})\n"
+
+            explicacion_resultados += "\n💡 INTERPRETACIÓN DE TUS DATOS:\n"
+            for var1, var2, corr in top_5[:3]:
+                var1_clean = var1.replace('_', ' ').title()
+                var2_clean = var2.replace('_', ' ').title()
+                if abs(corr) > 0.7:
+                    if corr > 0:
+                        explicacion_resultados += f"   • {var1_clean} y {var2_clean} van de la mano - cuando una mejora, la otra también\n"
+                    else:
+                        explicacion_resultados += f"   • {var1_clean} y {var2_clean} se compensan - cuando una sube, la otra baja\n"
+                else:
+                    explicacion_resultados += f"   • {var1_clean} y {var2_clean} tienen relación moderada - investigar más\n"
+            explicacion_resultados += "\n"
+
         explanation = (
-            "ANÁLISIS DE CORRELACIÓN PROFESIONAL\n\n"
-            f"Variables analizadas: {total_vars}\n"
-            f"Correlaciones fuertes (> 0.7): {strong_correlations}\n"
-            f"Correlaciones moderadas (0.3-0.7): {moderate_correlations}\n\n"
-            "INTERPRETACIÓN:\n"
-            "• Correlaciones positivas: Las variables se mueven en la misma dirección\n"
-            "• Correlaciones negativas: Las variables se mueven en direcciones opuestas\n"
-            "• Valores cercanos a 0: Variables independientes\n\n"
-            "VALOR PRÁCTICO:\n"
-            "• Identificar variables predictoras para modelos de IA\n"
-            "• Descubrir relaciones causales en la producción agrícola\n"
-            "• Optimizar estrategias de siembra y cosecha\n\n"
-            "RECOMENDACIONES:\n"
-            "• Usar variables con correlación > 0.7 para predicciones confiables\n"
-            "• Investigar correlaciones negativas para entender limitaciones\n"
-            "• Aprovechar variables independientes para diversificar riesgos"
+            "🔗 ANÁLISIS DE CORRELACIÓN AGRÍCOLA - RESULTADOS PERSONALIZADOS\n\n"
+            "Imagínate que tienes un grupo de amigos y quieres saber cómo se relacionan entre sí. "
+            "Eso es exactamente lo que hemos hecho con tus variables agrícolas.\n\n"
+            "📊 LO QUE ANALIZAMOS EN TUS DATOS:\n"
+            f"   • {total_vars} variables agrícolas de tu dataset\n"
+            f"   • {strong_correlations} conexiones muy fuertes encontradas\n"
+            f"   • {moderate_correlations} conexiones moderadas identificadas\n\n"
+            f"{explicacion_resultados}"
+            "🎯 GUÍA COMPLETA DE INTERPRETACIÓN:\n\n"
+            "1️⃣ CORRELACIÓN POSITIVA FUERTE (+0.7 a +1.0)\n"
+            "   • Significado: 'Cuando una sube, la otra también sube'\n"
+            "   • Ejemplo: Superficie sembrada ↔ Producción\n"
+            "   • Útil para: Predicciones confiables, planificación\n\n"
+            "2️⃣ CORRELACIÓN NEGATIVA FUERTE (-1.0 a -0.7)\n"
+            "   • Significado: 'Cuando una sube, la otra baja'\n"
+            "   • Ejemplo: Lluvia excesiva ↔ Menos rendimiento\n"
+            "   • Útil para: Encontrar equilibrios óptimos\n\n"
+            "3️⃣ CORRELACIÓN MODERADA (±0.3 a ±0.7)\n"
+            "   • Significado: 'Hay relación, pero no perfecta'\n"
+            "   • Ejemplo: Fertilizante ↔ Producción (depende de otros factores)\n"
+            "   • Útil para: Investigar causas adicionales\n\n"
+            "4️⃣ CORRELACIÓN DÉBIL (±0.0 a ±0.3)\n"
+            "   • Significado: 'Van por caminos separados'\n"
+            "   • Ejemplo: Color del tractor ↔ Rendimiento del cultivo\n"
+            "   • Útil para: Diversificar riesgos\n\n"
+            "📈 TUS 4 GRÁFICOS EXPLICADOS:\n\n"
+            "GRÁFICO 1 - GUÍA DE INTERPRETACIÓN:\n"
+            "   • Diccionario visual de qué significa cada correlación\n"
+            "   • Aprende a leer los números como un experto\n\n"
+            "GRÁFICO 2 - MATRIZ DE CORRELACIÓN:\n"
+            "   • Mapa completo de relaciones entre tus variables\n"
+            "   • Rojo/azul = conexiones fuertes, gris = independientes\n\n"
+            "GRÁFICO 3 - TOP RELACIONES:\n"
+            "   • Las conexiones más importantes de tus datos\n"
+            "   • Barras más altas = relaciones más relevantes\n\n"
+            "GRÁFICO 4 - RECOMENDACIONES:\n"
+            "   • Acciones específicas basadas en tus resultados\n\n"
+            "💡 ¿QUÉ HACER CON TUS RESULTADOS?\n\n"
+            "1️⃣ PARA TUS CORRELACIONES FUERTES:\n"
+            "   • Úsalas como base para modelos predictivos\n"
+            "   • Confía en estas relaciones para planificar\n\n"
+            "2️⃣ PARA RELACIONES MODERADAS:\n"
+            "   • Investiga qué otros factores influyen\n"
+            "   • Busca condiciones donde la relación sea más fuerte\n\n"
+            "3️⃣ PARA VARIABLES INDEPENDIENTES:\n"
+            "   • Úsalas para crear estrategias diversificadas\n"
+            "   • Reduce riesgos combinando variables no relacionadas\n\n"
+            "⚠️ RECUERDA:\n"
+            "   • Correlación NO significa causalidad\n"
+            "   • Una tercera variable podría estar influyendo\n"
+            "   • Las relaciones pueden cambiar con el tiempo\n\n"
+            "🎯 PRÓXIMOS PASOS RECOMENDADOS:\n"
+            "   • Usa las correlaciones > 0.7 para predicciones\n"
+            "   • Investiga correlaciones inesperadas\n"
+            "   • Actualiza este análisis periódicamente"
         )
 
-        messagebox.showinfo("Análisis Profesional de Correlación",
-                           f"Análisis completado y guardado en {correlacion_file}\n\n{explanation}")
+        # Mostrar mensaje conciso primero
+        resumen_rapido = (
+            f"✅ ANÁLISIS DE CORRELACIÓN COMPLETADO\n\n"
+            f"📊 Analizadas {total_vars} variables\n"
+            f"🔗 {strong_correlations} conexiones fuertes encontradas\n"
+            f"📈 {moderate_correlations} conexiones moderadas\n\n"
+            f"💡 RESULTADOS PRINCIPALES:\n"
+        )
+
+        if top_5:
+            for i, (var1, var2, corr) in enumerate(top_5[:3], 1):
+                var1_clean = var1.replace('_', ' ').title()
+                var2_clean = var2.replace('_', ' ').title()
+                resumen_rapido += f"   {i}. {var1_clean} ↔ {var2_clean}: {corr:.3f}\n"
+
+        resumen_rapido += f"\n📁 Gráfico guardado: {correlacion_file}\n\n¿Ver explicación completa?"
+
+        # Preguntar si quiere ver explicación completa
+        ver_completo = messagebox.askyesno("Análisis de Correlación",
+                                          resumen_rapido)
+
+        if ver_completo:
+            # Crear ventana con explicación completa y scroll
+            ventana_explicacion = tk.Toplevel(self.root)
+            ventana_explicacion.title("📊 Explicación Completa - Análisis de Correlación")
+            ventana_explicacion.geometry("900x700")
+
+            # Frame principal
+            frame_principal = tk.Frame(ventana_explicacion)
+            frame_principal.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+            # Título
+            titulo_label = tk.Label(frame_principal, text="🔗 ANÁLISIS DE CORRELACIÓN AGRÍCOLA DETALLADO",
+                                   font=('Arial', 16, 'bold'), fg='#2563EB')
+            titulo_label.pack(pady=(0, 20))
+
+            # Text widget con scroll para la explicación completa
+            frame_texto = tk.Frame(frame_principal)
+            frame_texto.pack(fill=tk.BOTH, expand=True)
+
+            scrollbar = tk.Scrollbar(frame_texto)
+            scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+            texto_completo = tk.Text(frame_texto, wrap=tk.WORD, yscrollcommand=scrollbar.set,
+                                    font=('Arial', 11), padx=10, pady=10)
+            texto_completo.pack(fill=tk.BOTH, expand=True)
+            scrollbar.config(command=texto_completo.yview)
+
+            # Insertar explicación completa
+            texto_completo.insert(tk.END, explanation)
+            texto_completo.config(state=tk.DISABLED)  # Hacer solo lectura
+
+            # Botón cerrar
+            boton_cerrar = tk.Button(frame_principal, text="Cerrar",
+                                    command=ventana_explicacion.destroy,
+                                    font=('Arial', 12, 'bold'),
+                                    bg='#DC2626', fg='white', padx=20, pady=10)
+            boton_cerrar.pack(pady=(20, 0))
+
+            # Centrar ventana
+            ventana_explicacion.transient(self.root)
+            ventana_explicacion.grab_set()
+        else:
+            messagebox.showinfo("Análisis Completado",
+                              f"✅ Análisis guardado exitosamente en:\n{correlacion_file}")
 
     def correlacion_sup_sembrada_cosechada(self):
         """
@@ -1670,7 +1855,7 @@ class DataAnalyzer:
         # Contar casos por nivel de riesgo
         conteo_riesgos = df_valid['Nivel_Riesgo'].value_counts()
 
-        # Análisis por provincia (solo para análisis global)
+        # Análisis por provincia
         zonas_alto_riesgo = []
         zonas_medio_riesgo = []
         zonas_bajo_riesgo = []
@@ -1685,19 +1870,18 @@ class DataAnalyzer:
             produccion_por_provincia.columns = ['Produccion_Promedio', 'Cantidad_Registros', 'Nivel_Riesgo_Predominante']
             produccion_por_provincia = produccion_por_provincia.reset_index()
 
-            if tipo_seleccionado == "Análisis Global":
-                # Clasificar provincias por nivel de riesgo predominante
-                for _, row in produccion_por_provincia.iterrows():
-                    provincia = row['provincia']
-                    nivel = row['Nivel_Riesgo_Predominante']
-                    prod_prom = row['Produccion_Promedio']
+            # Clasificar provincias por nivel de riesgo predominante
+            for _, row in produccion_por_provincia.iterrows():
+                provincia = row['provincia']
+                nivel = row['Nivel_Riesgo_Predominante']
+                prod_prom = row['Produccion_Promedio']
 
-                    if nivel == 'Alto Riesgo':
-                        zonas_alto_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
-                    elif nivel == 'Riesgo Medio':
-                        zonas_medio_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
-                    else:
-                        zonas_bajo_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+                if nivel == 'Alto Riesgo':
+                    zonas_alto_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+                elif nivel == 'Riesgo Medio':
+                    zonas_medio_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
+                else:
+                    zonas_bajo_riesgo.append(f"{provincia} ({prod_prom:.0f} ton promedio)")
 
         # Crear visualización mejorada
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
@@ -1725,18 +1909,22 @@ class DataAnalyzer:
             ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 1,
                     str(valor), ha='center', va='bottom', fontweight='bold')
 
-        # Gráfico 3: Producción por provincia si está disponible
-        if 'provincia' in df_valid.columns and len(produccion_por_provincia) <= 15:
+        # Gráfico 3: Producción por provincia si está disponible (si hay muchas, se muestran las Top 15)
+        if 'provincia' in df_valid.columns:
+            top_n = 15
             produccion_por_provincia_sorted = produccion_por_provincia.sort_values('Produccion_Promedio')
+            if len(produccion_por_provincia_sorted) > top_n:
+                produccion_por_provincia_sorted = produccion_por_provincia_sorted.tail(top_n)
+
             colores_provincias = ['red' if x == 'Alto Riesgo' else 'orange' if x == 'Riesgo Medio' else 'green'
-                                for x in produccion_por_provincia_sorted['Nivel_Riesgo_Predominante']]
+                                  for x in produccion_por_provincia_sorted['Nivel_Riesgo_Predominante']]
             
             bars = ax3.barh(produccion_por_provincia_sorted['provincia'],
-                           produccion_por_provincia_sorted['Produccion_Promedio'],
-                           color=colores_provincias)
+                            produccion_por_provincia_sorted['Produccion_Promedio'],
+                            color=colores_provincias)
             ax3.set_xlabel('Producción Promedio (toneladas)')
             ax3.set_ylabel('Provincia')
-            ax3.set_title('Producción Promedio por Provincia')
+            ax3.set_title('Producción Promedio por Provincia (Top 15)')
             ax3.grid(True, alpha=0.3)
         else:
             # Gráfico de dispersión alternativo
@@ -1744,7 +1932,7 @@ class DataAnalyzer:
             for nivel in df_valid['Nivel_Riesgo'].unique():
                 subset = df_valid[df_valid['Nivel_Riesgo'] == nivel]
                 ax3.scatter(range(len(subset)), subset['produccion'],
-                           c=colores_scatter[nivel], label=nivel, alpha=0.6)
+                            c=colores_scatter[nivel], label=nivel, alpha=0.6)
             ax3.set_xlabel('Índice de Registro')
             ax3.set_ylabel('Producción (toneladas)')
             ax3.set_title('Producción por Registro Clasificada por Riesgo')
@@ -1772,6 +1960,54 @@ class DataAnalyzer:
         plt.show()
         logging.info(f"Análisis de riesgos guardado en {riesgo_file}")
 
+        explanation = ""
+
+        # Generar mapa de riesgos por provincia si es análisis global y hay coordenadas
+        if tipo_seleccionado == "Análisis Global" and 'provincia' in df_valid.columns and 'Latitude' in df_valid.columns and 'Longitude' in df_valid.columns:
+            # Calcular coordenadas promedio por provincia
+            coords_por_provincia = df_valid.groupby('provincia').agg({
+                'Latitude': 'mean',
+                'Longitude': 'mean'
+            }).reset_index()
+
+            # Unir con produccion_por_provincia
+            mapa_data = produccion_por_provincia.merge(coords_por_provincia, on='provincia', how='left')
+
+            # Crear mapa
+            if not mapa_data.empty and mapa_data['Latitude'].notna().any():
+                centro = [mapa_data['Latitude'].mean(), mapa_data['Longitude'].mean()]
+                mapa_riesgos = folium.Map(location=centro, zoom_start=6)
+
+                color_map = {
+                    'Alto Riesgo': 'red',
+                    'Riesgo Medio': 'orange',
+                    'Bajo Riesgo': 'green'
+                }
+
+                for _, row in mapa_data.iterrows():
+                    if pd.notna(row['Latitude']) and pd.notna(row['Longitude']):
+                        folium.CircleMarker(
+                            location=[row['Latitude'], row['Longitude']],
+                            radius=10,
+                            popup=f"Provincia: {row['provincia']}<br>Producción Promedio: {row['Produccion_Promedio']:.0f} ton<br>Nivel de Riesgo: {row['Nivel_Riesgo_Predominante']}",
+                            color=color_map.get(row['Nivel_Riesgo_Predominante'], 'gray'),
+                            fill=True,
+                            fill_color=color_map.get(row['Nivel_Riesgo_Predominante'], 'gray'),
+                            fill_opacity=0.7
+                        ).add_to(mapa_riesgos)
+
+                mapa_riesgos_file = OUTPUT_DIR / "mapa_riesgos_provincias.html"
+                mapa_riesgos.save(mapa_riesgos_file)
+                logging.info(f"Mapa de riesgos por provincia guardado en {mapa_riesgos_file}")
+
+                # Abrir el mapa
+                webbrowser.open(mapa_riesgos_file.resolve().as_uri())
+
+                # Actualizar explicación
+                explanation += f"\n\n🗺️ MAPA DE RIESGOS POR PROVINCIA:\n   • Verde: Bajo Riesgo\n   • Naranja: Riesgo Medio\n   • Rojo: Alto Riesgo\n   • Archivo: {mapa_riesgos_file}"
+            else:
+                explanation += "\n\n⚠️ No se pudo generar el mapa de riesgos por provincia (faltan coordenadas)."
+
         # Asignar clasificación al DataFrame principal (solo para análisis global)
         if tipo_seleccionado == "Análisis Global":
             self.df.loc[df_valid.index, 'Nivel_Riesgo'] = df_valid['Nivel_Riesgo']
@@ -1781,25 +2017,7 @@ class DataAnalyzer:
         porcentaje_medio = (conteo_riesgos.get('Riesgo Medio', 0) / len(df_valid)) * 100
         porcentaje_bajo = (conteo_riesgos.get('Bajo Riesgo', 0) / len(df_valid)) * 100
 
-        # Construir información de zonas (solo relevante para análisis global)
-        zonas_info = ""
-        if tipo_seleccionado == "Análisis Global" and (zonas_alto_riesgo or zonas_medio_riesgo or zonas_bajo_riesgo):
-            zonas_info += "\n🗺️ ZONAS IDENTIFICADAS:\n"
-            if zonas_alto_riesgo:
-                zonas_info += f"   🔴 ALTO RIESGO: {', '.join(zonas_alto_riesgo[:5])}"
-                if len(zonas_alto_riesgo) > 5:
-                    zonas_info += f" y {len(zonas_alto_riesgo)-5} más"
-                zonas_info += "\n"
-            if zonas_medio_riesgo:
-                zonas_info += f"   🟡 RIESGO MEDIO: {', '.join(zonas_medio_riesgo[:5])}"
-                if len(zonas_medio_riesgo) > 5:
-                    zonas_info += f" y {len(zonas_medio_riesgo)-5} más"
-                zonas_info += "\n"
-            if zonas_bajo_riesgo:
-                zonas_info += f"   🟢 BAJO RIESGO: {', '.join(zonas_bajo_riesgo[:5])}"
-                if len(zonas_bajo_riesgo) > 5:
-                    zonas_info += f" y {len(zonas_bajo_riesgo)-5} más"
-                zonas_info += "\n"
+        # No mostrar zonas_info separadamente, solo en la interpretación
 
         explanation = (
             f"📊 {titulo_base.upper()}\n\n"
@@ -1812,17 +2030,16 @@ class DataAnalyzer:
             f"⚠️ Clasificación de Riesgos:\n"
             f"   🔴 ALTO RIESGO (≤{percentil_33:.0f} ton): {conteo_riesgos.get('Alto Riesgo', 0)} casos ({porcentaje_alto:.1f}%)\n"
             f"   🟡 RIESGO MEDIO ({percentil_33:.0f}-{percentil_66:.0f} ton): {conteo_riesgos.get('Riesgo Medio', 0)} casos ({porcentaje_medio:.1f}%)\n"
-            f"   🟢 BAJO RIESGO (>{percentil_66:.0f} ton): {conteo_riesgos.get('Bajo Riesgo', 0)} casos ({porcentaje_bajo:.1f}%)\n"
-            f"{zonas_info}\n"
+            f"   🟢 BAJO RIESGO (>{percentil_66:.0f} ton): {conteo_riesgos.get('Bajo Riesgo', 0)} casos ({porcentaje_bajo:.1f}%)\n\n"
             f"💡 Interpretación:\n"
-            f"   • Las zonas de ALTO RIESGO requieren atención inmediata\n"
-            f"   • Las zonas de RIESGO MEDIO necesitan monitoreo\n"
-            f"   • Las zonas de BAJO RIESGO son las más productivas\n\n"
+            f"   • Las provincias de ALTO RIESGO ({', '.join(zonas_alto_riesgo) if zonas_alto_riesgo else 'ninguna'}) requieren atención inmediata\n"
+            f"   • Las provincias de RIESGO MEDIO ({', '.join(zonas_medio_riesgo) if zonas_medio_riesgo else 'ninguna'}) necesitan monitoreo\n"
+            f"   • Las provincias de BAJO RIESGO ({', '.join(zonas_bajo_riesgo) if zonas_bajo_riesgo else 'ninguna'}) son las más productivas\n\n"
             f"📋 Recomendaciones:\n"
             f"   • Investigar causas en zonas de alto riesgo (clima, suelo, plagas)\n"
             f"   • Implementar mejores prácticas en zonas de riesgo medio\n"
             f"   • Replicar estrategias exitosas de zonas de bajo riesgo"
-        )
+        ) + explanation
 
         messagebox.showinfo(titulo_base, explanation)
 
@@ -1876,121 +2093,51 @@ class DataAnalyzer:
         X_train, X_test, y_train, y_test = train_test_split(X_scaled, y_scaled, test_size=0.2, random_state=42)
         X_train_orig, X_test_orig, y_train_orig, y_test_orig = train_test_split(X, y, test_size=0.2, random_state=42)
 
-        # Definir modelos y parámetros para comparación (optimizado para velocidad)
-        models = {
-            'SVR RBF': {
-                'model': SVR(),
-                'params': {
-                    'kernel': ['rbf'],
-                    'C': [1, 10],  # Reducido
-                    'gamma': ['scale', 0.1],  # Reducido
-                    'epsilon': [0.1]  # Reducido
-                }
-            },
-            'Random Forest': {
-                'model': RandomForestRegressor(random_state=42),
-                'params': {
-                    'n_estimators': [50, 100],  # Reducido
-                    'max_depth': [None, 10],  # Reducido
-                    'min_samples_split': [2, 5]  # Reducido
-                }
-            }
-        }
+        # Usar Regresión Lineal para predicción de tendencias (asegura variación en predicciones)
+        model = LinearRegression()
+        model.fit(X_train, y_train)
 
-        # Entrenar y evaluar modelos
-        results = {}
-        best_model = None
-        best_score = -float('inf')
-        best_model_name = ""
+        # Evaluar en conjunto de prueba
+        y_pred_scaled = model.predict(X_test)
+        y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
 
-        print("🔍 Optimizando modelos de IA...")
+        # Calcular métricas
+        mse = mean_squared_error(y_test_orig, y_pred)
+        rmse = np.sqrt(mse)
+        mae = np.mean(np.abs(y_test_orig - y_pred))
+        r2 = r2_score(y_test_orig, y_pred)
 
-        for name, config in models.items():
-            try:
-                # Grid Search con validación cruzada (optimizado)
-                grid_search = GridSearchCV(
-                    config['model'],
-                    config['params'],
-                    cv=3,  # Reducido de 5 a 3 para mayor velocidad
-                    scoring='neg_mean_squared_error',
-                    n_jobs=1,  # Cambiado a 1 para evitar problemas de paralelización
-                    verbose=1  # Agregado para mostrar progreso
-                )
+        best_model = model
+        best_model_name = 'Regresión Lineal'
+        best_score = r2
 
-                grid_search.fit(X_train, y_train)
-
-                # Evaluar en conjunto de prueba
-                y_pred_scaled = grid_search.predict(X_test)
-                y_pred = scaler_y.inverse_transform(y_pred_scaled.reshape(-1, 1)).ravel()
-
-                # Calcular métricas
-                mse = mean_squared_error(y_test_orig, y_pred)
-                rmse = np.sqrt(mse)
-                mae = np.mean(np.abs(y_test_orig - y_pred))
-                r2 = r2_score(y_test_orig, y_pred)
-
-                results[name] = {
-                    'model': grid_search.best_estimator_,
-                    'params': grid_search.best_params_,
-                    'mse': mse,
-                    'rmse': rmse,
-                    'mae': mae,
-                    'r2': r2,
-                    'y_pred': y_pred,
-                    'cv_score': -grid_search.best_score_
-                }
-
-                # Actualizar mejor modelo
-                if r2 > best_score:
-                    best_score = r2
-                    best_model = grid_search.best_estimator_
-                    best_model_name = name
-
-                print(f"✅ {name}: R² = {r2:.3f}, RMSE = {rmse:.2f}")
-
-            except Exception as e:
-                print(f"❌ Error en {name}: {e}")
-                continue
-
-        if not results:
-            messagebox.showerror("Error", "No se pudieron entrenar los modelos correctamente.")
-            return
+        print(f"✅ Regresión Lineal: R² = {r2:.3f}, RMSE = {rmse:.2f}")
 
         # Crear visualización comparativa
         fig, ((ax1, ax2), (ax3, ax4)) = plt.subplots(2, 2, figsize=(16, 12))
 
-        # Gráfico 1: Comparación de modelos
-        model_names = list(results.keys())
-        r2_scores = [results[name]['r2'] for name in model_names]
-        rmse_scores = [results[name]['rmse'] for name in model_names]
-
-        x = np.arange(len(model_names))
+        # Gráfico 1: Rendimiento del modelo
         width = 0.35
-
-        bars1 = ax1.bar(x - width/2, r2_scores, width, label='R²', color='skyblue', alpha=0.8)
+        bars1 = ax1.bar(0, r2, width, label='R²', color='skyblue', alpha=0.8)
         ax1.set_ylabel('Coeficiente de Determinación (R²)', color='skyblue')
-        ax1.set_title('Comparación de Rendimiento de Modelos')
-        ax1.set_xticks(x)
-        ax1.set_xticklabels(model_names, rotation=45)
+        ax1.set_title('Rendimiento del Modelo de Regresión Lineal')
+        ax1.set_xticks([])
         ax1.legend(loc='upper left')
 
         ax1_twin = ax1.twinx()
-        bars2 = ax1_twin.bar(x + width/2, rmse_scores, width, label='RMSE', color='orange', alpha=0.8)
+        bars2 = ax1_twin.bar(width, rmse, width, label='RMSE', color='orange', alpha=0.8)
         ax1_twin.set_ylabel('Error Cuadrático Medio (RMSE)', color='orange')
         ax1_twin.legend(loc='upper right')
 
         # Agregar valores en barras
-        for bar, val in zip(bars1, r2_scores):
-            ax1.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.01,
-                    f'{val:.3f}', ha='center', va='bottom', fontsize=8)
+        ax1.text(bars1.get_x() + bars1.get_width()/2, bars1.get_height() + 0.01,
+                f'{r2:.3f}', ha='center', va='bottom', fontsize=8)
 
-        for bar, val in zip(bars2, rmse_scores):
-            ax1_twin.text(bar.get_x() + bar.get_width()/2, bar.get_height() + val*0.02,
-                         f'{val:.0f}', ha='center', va='bottom', fontsize=8)
+        ax1_twin.text(bars2.get_x() + bars2.get_width()/2, bars2.get_height() + rmse*0.02,
+                     f'{rmse:.0f}', ha='center', va='bottom', fontsize=8)
 
-        # Gráfico 2: Predicciones vs Valores Reales (mejor modelo)
-        best_result = results[best_model_name]
-        ax2.scatter(y_test_orig, best_result['y_pred'], alpha=0.6, color='green', s=50)
+        # Gráfico 2: Predicciones vs Valores Reales
+        ax2.scatter(y_test_orig, y_pred, alpha=0.6, color='green', s=50)
         ax2.plot([y_test_orig.min(), y_test_orig.max()],
                 [y_test_orig.min(), y_test_orig.max()],
                 'r--', linewidth=2, label='Línea ideal')
@@ -2001,7 +2148,7 @@ class DataAnalyzer:
         ax2.legend()
 
         # Agregar línea de tendencia
-        z = np.polyfit(y_test_orig, best_result['y_pred'], 1)
+        z = np.polyfit(y_test_orig, y_pred, 1)
         p = np.poly1d(z)
         ax2.plot(y_test_orig, p(y_test_orig), "b--", alpha=0.8, label='Tendencia')
 
@@ -2028,7 +2175,7 @@ class DataAnalyzer:
         ax3.grid(True, alpha=0.3)
 
         # Gráfico 4: Distribución de errores
-        errores = y_test_orig - best_result['y_pred']
+        errores = y_test_orig - y_pred
         ax4.hist(errores, bins=20, alpha=0.7, color='purple', edgecolor='black')
         ax4.axvline(0, color='red', linestyle='--', linewidth=2, label='Sin error')
         ax4.set_xlabel('Error de Predicción (toneladas)')
@@ -2054,7 +2201,6 @@ class DataAnalyzer:
         logging.info(f"Análisis predictivo avanzado guardado en {output_file}")
 
         # Crear reporte detallado
-        best_result = results[best_model_name]
 
         # Calcular estadísticas adicionales
         total_datos = len(df_trabajo)
@@ -2078,9 +2224,9 @@ class DataAnalyzer:
             f"📊 Datos usados: {total_datos:,} registros de producción agrícola\n"
             f"📅 Años analizados: {años_sorted[0]} - {años_sorted[-1]}\n"
             f"🌾 Producción total histórica: {produccion_total:,.0f} toneladas\n\n"
-            f"🏆 MEJOR MÉTODO ENCONTRADO: {best_model_name}\n"
-            f"   • Precisión del modelo: {best_result['r2']:.2f} (más cerca de 1 = mejor)\n"
-            f"   • Error promedio: {best_result['rmse']:.0f} toneladas\n\n"
+            f"🏆 MÉTODO UTILIZADO: {best_model_name}\n"
+            f"   • Precisión del modelo: {r2:.2f} (más cerca de 1 = mejor)\n"
+            f"   • Error promedio: {rmse:.0f} toneladas\n\n"
             f"🔮 PREDICCIONES PARA LOS PRÓXIMOS 5 AÑOS:\n"
             f"   • {años_futuros[0]}: {y_futuro[0]:,.0f} toneladas\n"
             f"   • {años_futuros[1]}: {y_futuro[1]:,.0f} toneladas\n"
@@ -2091,8 +2237,8 @@ class DataAnalyzer:
             f"   • Cambio en el período estudiado: {cambio_total:+.1f}%\n"
             f"   • Dirección: {'📈 Producción subiendo' if cambio_total > 5 else '📉 Producción bajando' if cambio_total < -5 else '➡️ Producción estable'}\n\n"
             f"💡 ¿QUÉ SIGNIFICA ESTO?\n"
-            f"   • La IA encontró patrones en tus datos históricos\n"
-            f"   • Las predicciones te ayudan a planificar el futuro\n"
+            f"   • La regresión lineal encontró la tendencia en tus datos históricos\n"
+            f"   • Las predicciones siguen una línea recta basada en el patrón observado\n"
             f"   • Si la precisión es buena, puedes confiar en las estimaciones\n\n"
             f"📋 PARA QUÉ USARLO:\n"
             f"   • Planificar cuánta superficie sembrar\n"
@@ -2560,7 +2706,7 @@ class DataAnalyzer:
             cultivo_data = filtered_data[filtered_data['cultivo'] == cultivo]
             plt.plot(cultivo_data['campana'], cultivo_data['produccion'], marker='o', label=cultivo)
 
-        plt.title('Producción de los 4 principales cultivos por campana')
+        plt.title('Producción de los 4 principales cultivos por campaña')
         plt.xlabel('Campaña')
         plt.ylabel('Producción (en toneladas)')
         plt.xticks(rotation=45)
@@ -2644,6 +2790,127 @@ class DataAnalyzer:
 
         selected_option = combobox_value.get()
         return selected_option
+
+    def acerca_de(self):
+        """Muestra información sobre la aplicación."""
+        info = (
+            "🌾 APLICACIÓN DE ANÁLISIS AGRÍCOLA CON IA\n\n"
+            "Versión: 2025.1.0\n"
+            "Desarrollado para análisis de datos agrícolas.\n\n"
+            "Características principales:\n"
+            "• Análisis estadístico integral de variables numéricas\n"
+            "• Análisis temporal de producción agrícola\n"
+            "• Análisis de correlación entre variables\n"
+            "• Modelos predictivos con IA\n"
+            "• Clasificación y análisis de cultivos\n"
+            "• Análisis de riesgos por provincia\n"
+            "• Geocodificación y mapas interactivos\n\n"
+            "Tecnologías utilizadas:\n"
+            "• Python con Tkinter para interfaz gráfica\n"
+            "• Pandas para manipulación de datos\n"
+            "• Matplotlib y Seaborn para visualizaciones\n"
+            "• Scikit-learn para modelos de IA\n"
+            "• Folium para mapas interactivos\n"
+            "• TensorFlow para redes neuronales\n\n"
+            "Desarrollado para tesis académica en agricultura."
+        )
+        messagebox.showinfo("Acerca de", info)
+
+    def manual_usuario(self):
+        """Muestra el manual de usuario de la aplicación en una ventana desplazable."""
+        manual = (
+            "📖 MANUAL DE USUARIO - ANÁLISIS AGRÍCOLA CON IA\n\n"
+            "PASO 1: CARGAR DATOS\n"
+            "• Selecciona 'Archivo' > 'Cargar CSV'\n"
+            "• Elige un archivo CSV con datos agrícolas\n"
+            "• Columnas recomendadas: campana, cultivo, provincia, produccion, sup_sembrada, sup_cosechada, rendimiento\n\n"
+            "PASO 2: ANÁLISIS DISPONIBLES\n\n"
+            "📊 SUMAR COLUMNAS:\n"
+            "• Analiza estadísticas de todas las variables numéricas\n"
+            "• Genera gráficos de totales, promedios y coeficiente de variación\n\n"
+            "📈 ANÁLISIS TEMPORAL:\n"
+            "• Muestra evolución de producción por años\n"
+            "• Requiere columna 'campana'\n\n"
+            "🔗 ANÁLISIS DE CORRELACIÓN:\n"
+            "• Identifica relaciones entre variables\n"
+            "• Muestra matriz de correlación y gráficos\n\n"
+            "🤖 PREDICCIÓN DE TENDENCIAS CON IA:\n"
+            "• Predice producción futura usando regresión lineal\n"
+            "• Requiere columnas 'campana' y 'produccion'\n\n"
+            "📈 MODELOS PREDICTIVOS:\n"
+            "• Modelo de regresión lineal para superficie vs producción\n"
+            "• Requiere 'sup_sembrada' y 'produccion'\n\n"
+            "🌱 CLASIFICACIÓN DE CULTIVOS:\n"
+            "• Analiza distribución y características de cultivos\n"
+            "• Requiere columna 'cultivo'\n\n"
+            "⚠️ ANÁLISIS DE RIESGOS:\n"
+            "• Clasifica zonas por nivel de riesgo de producción\n"
+            "• Opciones: Global, Por Provincia, Por Cultivo\n\n"
+            "🗺️ GEOCODIFICACIÓN:\n"
+            "• Convierte direcciones en coordenadas GPS\n"
+            "• Requiere 'departamento', 'provincia', 'pais'\n\n"
+            "🗺️ GENERAR MAPA:\n"
+            "• Crea mapa interactivo con ubicaciones\n"
+            "• Requiere coordenadas geocodificadas\n\n"
+            "🌍 MAPA DE DISTRIBUCIÓN DE CULTIVOS:\n"
+            "• Muestra cultivos en mapa mundial\n"
+            "• Requiere coordenadas y columna 'cultivo'\n\n"
+            "PASO 3: INTERPRETAR RESULTADOS\n\n"
+            "• Cada análisis genera gráficos guardados en carpeta 'output/'\n"
+            "• Los gráficos incluyen explicaciones detalladas\n"
+            "• Mapas se abren automáticamente en navegador\n\n"
+            "REQUISITOS DEL CSV:\n"
+            "• Formato: CSV separado por comas\n"
+            "• Codificación: UTF-8\n"
+            "• Columnas: Nombres en español o inglés (se normalizan)\n"
+            "• Datos: Valores numéricos para análisis estadístico\n\n"
+            "TIPS PARA MEJORES RESULTADOS:\n"
+            "• Asegúrate de que los datos estén limpios (sin valores nulos en columnas clave)\n"
+            "• Usa al menos 10 registros para análisis predictivos\n"
+            "• Para mapas, geocodifica primero las direcciones\n"
+            "• Los gráficos se guardan automáticamente en alta resolución"
+        )
+
+        # Crear ventana con explicación completa y scroll
+        ventana_manual = tk.Toplevel(self.root)
+        ventana_manual.title("📖 Manual de Usuario - Análisis Agrícola con IA")
+        ventana_manual.geometry("900x700")
+
+        # Frame principal
+        frame_principal = tk.Frame(ventana_manual)
+        frame_principal.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Título
+        titulo_label = tk.Label(frame_principal, text="📖 MANUAL DE USUARIO DETALLADO",
+                               font=('Arial', 16, 'bold'), fg='#2563EB')
+        titulo_label.pack(pady=(0, 20))
+
+        # Text widget con scroll para el manual completo
+        frame_texto = tk.Frame(frame_principal)
+        frame_texto.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(frame_texto)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        texto_manual = tk.Text(frame_texto, wrap=tk.WORD, yscrollcommand=scrollbar.set,
+                              font=('Arial', 11), padx=10, pady=10)
+        texto_manual.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=texto_manual.yview)
+
+        # Insertar manual completo
+        texto_manual.insert(tk.END, manual)
+        texto_manual.config(state=tk.DISABLED)  # Hacer solo lectura
+
+        # Botón cerrar
+        boton_cerrar = tk.Button(frame_principal, text="Cerrar",
+                                command=ventana_manual.destroy,
+                                font=('Arial', 12, 'bold'),
+                                bg='#DC2626', fg='white', padx=20, pady=10)
+        boton_cerrar.pack(pady=(20, 0))
+
+        # Centrar ventana
+        ventana_manual.transient(self.root)
+        ventana_manual.grab_set()
 
     @staticmethod
     def safe_file_name(name):
