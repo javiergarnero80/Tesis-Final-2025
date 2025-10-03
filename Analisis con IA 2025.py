@@ -2364,52 +2364,95 @@ class DataAnalyzer:
         plt.show()
 
         explanation = (
-            f"🧠 PREDICCIÓN AVANZADA CON RED NEURONAL - {selected_cultivo.upper()}\n\n"
-            f"Este análisis utiliza Inteligencia Artificial (una 'red neuronal' similar a un cerebro) para predecir "
-            f"la producción agrícola del cultivo '{selected_cultivo}' basándose en variables como superficie sembrada, "
-            f"superficie cosechada y rendimiento.\n\n"
-            f"📊 DATOS DEL CULTIVO ANALIZADO:\n"
-            f"   • Registros válidos: {len(df_clean)}\n"
-            f"   • Producción promedio: {prod_media:.0f} toneladas\n"
-            f"   • Producción mínima: {prod_min:.0f} toneladas\n"
-            f"   • Producción máxima: {prod_max:.0f} toneladas\n"
-            f"   • Variabilidad (desviación estándar): {prod_std:.0f} toneladas\n\n"
-            f"🤖 ARQUITECTURA DE LA RED NEURONAL:\n"
-            f"   • Entradas: 3 variables (sup. sembrada, sup. cosechada, rendimiento)\n"
-            f"   • Capas ocultas: 2 (10 y 8 neuronas)\n"
-            f"   • Salida: 1 valor (producción predicha)\n"
-            f"   • Entrenamiento: 100 epochs con optimización automática\n\n"
-            f"📈 MÉTRICAS DE RENDIMIENTO:\n"
-            f"   • Error Cuadrático Medio (MSE): {mse:.0f}\n"
-            f"     ↳ Mide el promedio de los errores al cuadrado\n"
-            f"   • Error Absoluto Medio (MAE): {mae:.0f}\n"
-            f"     ↳ Error promedio en valor absoluto (más fácil de interpretar)\n"
-            f"   • Raíz del Error Cuadrático Medio (RMSE): {rmse:.0f}\n"
-            f"     ↳ Error típico en las mismas unidades que la producción\n"
-            f"   • Coeficiente de Determinación (R²): {r2:.3f}\n"
-            f"     ↳ Porcentaje de variabilidad explicada (1.0 = predicción perfecta)\n\n"
-            f"⚖️ COMPARACIÓN CON MODELO SIMPLE:\n"
-            f"   • Si siempre predijéramos la media ({prod_media:.0f} ton): R² = {r2_media:.3f}\n"
-            f"   • Nuestra red neuronal: R² = {r2:.3f}\n"
-            f"   • Mejora respecto a la media: {(r2 - r2_media)*100:.1f}%\n\n"
-            f"💡 INTERPRETACIÓN DE RESULTADOS:\n"
-            f"   • R² > 0.8: Excelente predicción\n"
-            f"   • R² 0.6-0.8: Buena predicción\n"
-            f"   • R² 0.3-0.6: Predicción aceptable\n"
-            f"   • R² < 0.3: Predicción pobre (revisar datos o modelo)\n\n"
-            f"🔬 ¿POR QUÉ USAR RED NEURONAL?\n"
-            f"   • Aprende relaciones no lineales complejas\n"
-            f"   • Maneja múltiples variables simultáneamente\n"
-            f"   • Se adapta automáticamente a patrones en los datos\n"
-            f"   • Útil cuando las relaciones entre variables no son simples\n\n"
-            f"📋 APLICACIONES PRÁCTICAS:\n"
-            f"   • Planificación de siembra basada en predicciones\n"
-            f"   • Optimización de recursos agrícolas\n"
-            f"   • Toma de decisiones ante incertidumbre climática\n"
-            f"   • Evaluación de eficiencia productiva\n\n"
-            f"📊 Gráfico guardado en: {output_file}"
+            f"🧠 ANÁLISIS PREDICTIVO CON RED NEURONAL - {selected_cultivo.upper()}\n\n"
+            f"Este análisis entrena una red neuronal artificial para predecir la producción del cultivo "
+            f"'{selected_cultivo}' usando tres variables principales: superficie sembrada, superficie cosechada y rendimiento.\n\n"
+            f"📊 DATOS UTILIZADOS:\n"
+            f"   • Registros válidos analizados: {len(df_clean)}\n"
+            f"   • Producción promedio histórica: {prod_media:.0f} toneladas\n"
+            f"   • Producción mínima registrada: {prod_min:.0f} toneladas\n"
+            f"   • Producción máxima registrada: {prod_max:.0f} toneladas\n"
+            f"   • Desviación estándar: {prod_std:.0f} toneladas\n\n"
+            f"🤖 CONFIGURACIÓN DEL MODELO:\n"
+            f"   • Tipo: Red neuronal con 2 capas ocultas (10 y 8 neuronas)\n"
+            f"   • Entradas: 3 variables (sup_sembrada, sup_cosechada, rendimiento)\n"
+            f"   • Salida: 1 valor (producción predicha en toneladas)\n"
+            f"   • Entrenamiento: 100 iteraciones con optimización automática\n"
+            f"   • Validación: 20% de datos reservados para pruebas\n\n"
+            f"📈 RESULTADOS DEL MODELO:\n"
+            f"   • Error cuadrático medio (MSE): {mse:.0f} ton²\n"
+            f"   • Error absoluto medio (MAE): {mae:.0f} toneladas\n"
+            f"   • Raíz del error cuadrático medio (RMSE): {rmse:.0f} toneladas\n"
+            f"   • Coeficiente de determinación (R²): {r2:.3f}\n\n"
+            f"⚖️ COMPARACIÓN CON REFERENCIA:\n"
+            f"   • Modelo de referencia (predicción constante = media): R² = {r2_media:.3f}\n"
+            f"   • Mejora del modelo neuronal: {(r2 - r2_media)*100:.1f} puntos porcentuales\n\n"
+            f"💡 INTERPRETACIÓN PRÁCTICA:\n"
+            f"   • R² ≥ 0.8: Modelo muy preciso, predicciones confiables\n"
+            f"   • R² 0.6-0.8: Modelo bueno, útil para estimaciones\n"
+            f"   • R² 0.3-0.6: Modelo aceptable, considerar con precaución\n"
+            f"   • R² < 0.3: Modelo deficiente, revisar calidad de datos\n\n"
+            f"🔬 VENTAJAS DE LA RED NEURONAL:\n"
+            f"   • Capacidad para modelar relaciones no lineales complejas\n"
+            f"   • Procesamiento simultáneo de múltiples variables predictoras\n"
+            f"   • Aprendizaje automático de patrones en los datos\n"
+            f"   • Adaptabilidad a diferentes tipos de cultivos y condiciones\n\n"
+            f"📋 APLICACIONES CONCRETAS:\n"
+            f"   • Estimación de producción para planificación agrícola\n"
+            f"   • Optimización de superficies de siembra\n"
+            f"   • Evaluación de riesgos productivos\n"
+            f"   • Soporte a decisiones de inversión en cultivos\n\n"
+            f"📊 ANÁLISIS DE GRÁFICOS:\n"
+            f"   • Gráfico izquierdo: Dispersión de valores reales vs predichos\n"
+            f"   • Gráfico derecho: Distribución de errores residuales\n"
+            f"   • Puntos cerca de la línea diagonal = mejores predicciones\n"
+            f"   • Errores centrados en cero = modelo bien calibrado\n\n"
+            f"⚠️ CONSIDERACIONES:\n"
+            f"   • Las predicciones son válidas solo dentro del rango de datos históricos\n"
+            f"   • Factores externos (clima, plagas) pueden afectar la precisión\n"
+            f"   • Recomendado validar con datos futuros antes de decisiones críticas\n\n"
+            f"📁 Archivo guardado: {output_file}"
         )
-        messagebox.showinfo("Análisis Predictivo con Red Neuronal", explanation)
+        # Crear ventana responsive con explicación completa y scroll
+        ventana_nn = tk.Toplevel(self.root)
+        ventana_nn.title("🧠 Resultados - Análisis Predictivo con Red Neuronal")
+        ventana_nn.geometry("900x700")
+
+        # Frame principal
+        frame_principal = tk.Frame(ventana_nn)
+        frame_principal.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+
+        # Título
+        titulo_label = tk.Label(frame_principal, text=f"🧠 ANÁLISIS PREDICTIVO CON RED NEURONAL - {selected_cultivo.upper()}",
+                               font=('Arial', 16, 'bold'), fg='#2563EB')
+        titulo_label.pack(pady=(0, 20))
+
+        # Text widget con scroll para la explicación completa
+        frame_texto = tk.Frame(frame_principal)
+        frame_texto.pack(fill=tk.BOTH, expand=True)
+
+        scrollbar = tk.Scrollbar(frame_texto)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        texto_nn = tk.Text(frame_texto, wrap=tk.WORD, yscrollcommand=scrollbar.set,
+                          font=('Arial', 11), padx=10, pady=10)
+        texto_nn.pack(fill=tk.BOTH, expand=True)
+        scrollbar.config(command=texto_nn.yview)
+
+        # Insertar explicación completa
+        texto_nn.insert(tk.END, explanation)
+        texto_nn.config(state=tk.DISABLED)  # Hacer solo lectura
+
+        # Botón cerrar
+        boton_cerrar = tk.Button(frame_principal, text="Cerrar",
+                                command=ventana_nn.destroy,
+                                font=('Arial', 12, 'bold'),
+                                bg='#DC2626', fg='white', padx=20, pady=10)
+        boton_cerrar.pack(pady=(20, 0))
+
+        # Centrar ventana
+        ventana_nn.transient(self.root)
+        ventana_nn.grab_set()
 
     def geocodificar_direcciones(self):
         """Geocodifica direcciones con barra de progreso moderna y guarda las coordenadas en el DataFrame."""
